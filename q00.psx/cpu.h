@@ -2,11 +2,10 @@
 #ifndef R3000A_GUARD
 #define R3000A_GUARD
 #include "defs.h"
-#include "mmu.h"
 
-class R3000A {
+namespace R3000A {
 
-	struct Registers {
+	static struct Registers {
 		u32 zero = 0x00;
 		u32 at = 0x00;
 		u32 v[2] = { 0x00 };
@@ -23,15 +22,11 @@ class R3000A {
 		u32 pc = 0x00;
 		u32 hi = 0x00;
 		u32 lo = 0x00;
-	};
+	} registers;
 
-	public:
-		R3000A(Memory* ptrMem);
-		void step();
+	void init();
+	void step();
 
-	private:
-		Registers regs = Registers();
-		Memory* mem;
-};
+}
 
 #endif

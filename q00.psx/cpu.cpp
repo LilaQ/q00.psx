@@ -1,18 +1,23 @@
 #include "cpu.h"
-
+#include "mmu.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <iostream>
+#include "include/spdlog/spdlog.h"
+#include "include/spdlog/sinks/stdout_color_sinks.h"
+#define CPU R3000A
 
-R3000A::R3000A(Memory* ptrMem) {
-	mem = ptrMem;
-	printf("Init R3000A\n");
+static auto console = spdlog::stdout_color_mt("CPU");
+
+void R3000A::init() { 
+	console->warn("Init CPU");
 }
 
 void R3000A::step() {
-	word opcode = mem->fetch(regs.pc);
+	
+	word opcode = Memory::fetchWord(R3000A::registers.pc);
 
-	printf("Processing opcode: 0x%32x", opcode);
+	printf("Processing opcode: 0x%08x", opcode);
 
 	//	decode the opcode
 	u8 prim_opcode = opcode >> 26;

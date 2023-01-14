@@ -1,18 +1,25 @@
 #include <iostream>
-
 #include "cpu.h"
 #include "mmu.h"
+#include "fileimport.h"
+#include "include/spdlog/spdlog.h"
+#include "include/spdlog/sinks/stdout_color_sinks.h"
 
-int main() {
+int main(int argc, char* argv[]) {
 
-    //std::cout << "Starting q00.psx...\n";
+    //  Logger init
+    auto console = spdlog::stdout_color_mt("Main");
+    spdlog::set_pattern("[%T:%e] [%n] [%^%l%$] %v");
+    console->info("Starting q00.psx...");
 
-    Memory mem = Memory();
-    R3000A cpu = R3000A(&mem);
-    
+    //  Component init
+    R3000A::init();
+    Memory::init();
+
+    FileImport::loadEXE("CPUOR.exe");
 
     while (1) {
-        cpu.step();
+        //R3000A::step();
     }
 
 }
