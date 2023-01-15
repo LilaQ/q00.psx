@@ -1,5 +1,7 @@
 #include "defs.h"
 #include "utils.h"
+#include "mmu.h"
+#include "cpu.h"
 #include "fileimport.h"
 #include <iostream>
 #include <fstream>
@@ -8,12 +10,14 @@
 #include "include/spdlog/sinks/stdout_color_sinks.h"
 using namespace std;
 
+#define FILE_DATA_START 0x800
+#define FILE_DATA_SIZE(end) end - FILE_DATA_START
+
 static auto console = spdlog::stdout_color_mt("FileImport");
 
 void FileImport::loadEXE(const char filename[]) {
 	byte* file = FileImport::loadFile(filename);
 
-	//	initial PC
 	word initialPC = Utils::readWord(file, 0x10);
 	word initialGP = Utils::readWord(file, 0x14);
 	word ramStart = Utils::readWord(file, 0x18);
@@ -31,6 +35,11 @@ void FileImport::loadEXE(const char filename[]) {
 	console->info("Memfill Size: 0x{0:x}", memFillSize);
 	console->info("SP Base: 0x{0:x}", initialSPBase);
 	console->info("SP Offset: 0x{0:x}", initialSPOffs);
+
+	R3000A::registers.pc = initialPC;
+	R3000A::registers.gp = initialGP;
+	R3000A::registers.sp = initialSPBase + initialSPOffs;
+	Memory::loadToRAM(ramStart, file, FILE_DATA_START, FILE_DATA_SIZE(fileSize));
 }
 
 byte* FileImport::loadFile(const char filename[]) {

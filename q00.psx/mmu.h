@@ -7,6 +7,7 @@ namespace Memory {
 
 	void init();
 	word fetchWord(word);
+	void loadToRAM(word, byte*, word, word);
 }
 
 #endif

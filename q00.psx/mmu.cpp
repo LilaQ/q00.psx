@@ -4,6 +4,7 @@
 #include <iostream>
 #include "include/spdlog/spdlog.h"
 #include "include/spdlog/sinks/stdout_color_sinks.h"
+#define MASKED_ADDRESS(a) a & 0x1fffffff
 
 static auto console = spdlog::stdout_color_mt("Memory");
 
@@ -20,12 +21,14 @@ void Memory::init() {
 }
 
 word Memory::fetchWord(word address) {
-	word res = mRam[address];
-	res = res << 8;
-	res |= mRam[address + 1];
-	res = res << 8;
-	res |= mRam[address + 2];
-	res = res << 8;
-	res |= mRam[address + 3];
+	word res = mRam[MASKED_ADDRESS(address)];
+	res |= mRam[MASKED_ADDRESS(address + 1)] << 8;
+	res |= mRam[MASKED_ADDRESS(address + 2)] << 16;
+	res |= mRam[MASKED_ADDRESS(address + 3)] << 24;
 	return res;
+}
+
+void Memory::loadToRAM(word targetAddress, byte* source, word offset, word size) {
+	memcpy(&mRam[MASKED_ADDRESS(targetAddress)], &source[offset], sizeof(byte) * size);
+	console->info("Done loading to RAM");
 }
