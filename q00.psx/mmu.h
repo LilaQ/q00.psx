@@ -6,7 +6,12 @@
 namespace Memory {
 
 	void init();
-	word fetchWord(word);
+	
+	word fetchWord(word address);
+	void storeWord(word address, word data);
+
+	byte fetchByte(word address);
+
 	void loadToRAM(word, byte*, word, word);
 }
 

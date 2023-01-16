@@ -2,6 +2,7 @@
 #ifndef R3000A_GUARD
 #define R3000A_GUARD
 #include "defs.h"
+#include "include/spdlog/spdlog.h"
 
 namespace R3000A {
 
@@ -22,7 +23,11 @@ namespace R3000A {
 
 	void init();
 	void step();
-
 }
+
+class CPU_PC_flag_formatter : public spdlog::custom_flag_formatter {
+	void format(const spdlog::details::log_msg&, const std::tm&, spdlog::memory_buf_t& dest) override;
+	std::unique_ptr<custom_flag_formatter> clone() const override;
+};
 
 #endif

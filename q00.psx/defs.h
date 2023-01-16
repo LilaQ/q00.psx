@@ -9,3 +9,4 @@ typedef int8_t i8;
 typedef u32 word;
 typedef u16 hword;
 typedef u8 byte;
+#define SIGN_EXT32(a) (int32_t)(int16_t)a
