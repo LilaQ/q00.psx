@@ -1,6 +1,7 @@
 #include <iostream>
 #include "cpu.h"
 #include "mmu.h"
+#include "gpu.h"
 #include "fileimport.h"
 #include "include/spdlog/spdlog.h"
 #include "include/spdlog/sinks/stdout_color_sinks.h"
@@ -16,6 +17,7 @@ int main(int argc, char* argv[]) {
     //  Component init
     R3000A::init();
     Memory::init();
+    GPU::init();
 
     FileImport::loadEXE("CPUOR.exe");
 

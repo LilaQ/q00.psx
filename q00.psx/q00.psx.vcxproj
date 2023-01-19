@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -142,12 +142,14 @@
   <ItemGroup>
     <ClCompile Include="cpu.cpp" />
     <ClCompile Include="fileimport.cpp" />
+    <ClCompile Include="gpu.cpp" />
     <ClCompile Include="mmu.cpp" />
     <ClCompile Include="q00.psx.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="fileimport.h" />
+    <ClInclude Include="gpu.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>

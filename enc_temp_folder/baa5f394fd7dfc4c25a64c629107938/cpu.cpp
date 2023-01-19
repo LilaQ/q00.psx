@@ -18,7 +18,7 @@ namespace CPU {
 static auto console = spdlog::stdout_color_mt("CPU");
 
 void CPU::init() { 
-	console->info("Init CPU");
+	console->warn("Init CPU");
 	auto formatter = std::make_unique<spdlog::pattern_formatter>();
 	formatter->add_flag<CPU_PC_flag_formatter>('*').set_pattern("[%T:%e] [%n] [%*] [%^%l%$] %v");
 	console->set_formatter(std::move(formatter));

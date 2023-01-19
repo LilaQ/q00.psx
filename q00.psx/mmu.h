@@ -7,6 +7,7 @@ namespace Memory {
 
 	void init();
 	
+	word fetchOpcode(word address);
 	word fetchWord(word address);
 	void storeWord(word address, word data);
 

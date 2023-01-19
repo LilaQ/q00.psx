@@ -164,7 +164,7 @@ class BIOS : public Mem {			//	2048k - Expansion Region 3
 } mBios;
 
 void Memory::init() { 
-	console->info("Memory Init");
+	console->warn("Memory Init");
 }
 
 constexpr Mem* getMemoryRegion(word address) {

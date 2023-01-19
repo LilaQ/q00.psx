@@ -15,6 +15,7 @@ namespace R3000A {
 		u32 ra = 0x00;
 
 		u32 pc = 0x00;
+		u32 next_pc = 0x00;		//	used for branch delay slot
 		u32 hi = 0x00;
 		u32 lo = 0x00;
 	};

@@ -36,7 +36,7 @@ void FileImport::loadEXE(const char filename[]) {
 	console->info("SP Base: 0x{0:x}", initialSPBase);
 	console->info("SP Offset: 0x{0:x}", initialSPOffs);
 
-	R3000A::registers.pc = initialPC;
+	R3000A::registers.next_pc = initialPC;	//	next_pc because branch delay slot
 	R3000A::registers.gp = initialGP;
 	R3000A::registers.sp = initialSPBase + initialSPOffs;
 
