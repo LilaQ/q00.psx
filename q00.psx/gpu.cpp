@@ -1,22 +1,35 @@
 #include "gpu.h"
 #include "include/spdlog/spdlog.h"
 #include "include/spdlog/sinks/stdout_color_sinks.h"
+#include <SDL.h>
 #include <vector>
 #define GPU_COMMAND_TYPE(a) (a >> 24) & 0xff
 #define RGB_8BIT_TO_5BIT(a) (a >> 3)
+#define VRAM_ROW_LENGTH 1024
 
 static auto console = spdlog::stdout_color_mt("GPU");
 
 namespace GPU {
-	std::vector<word> fifoBuffer;
-	u8* vram = new u8[0x100'000];		//	1MB VRAM
+	std::vector<u32> fifoBuffer;
+	u16* vram;
 
+	//	GPU commands
 	u8 commandDurationLUT[0x100];
 	u8 activeCommand = 0x00;
+
+	//	SDL
+	void setupSDL();
+	SDL_Window* win = NULL;
+	SDL_Renderer* renderer = NULL;
+	SDL_Texture* img = NULL;
+	unsigned int lastUpdateTime = 0;
 }
 
 void GPU::init() {
 	console->info("GPU init");
+
+	//	vram array on the heap (1MB VRAM)
+	vram = new u16[0x100'000] { 0x0 };
 
 	//	init command duration LUT
 	commandDurationLUT[0x01] = 1;	//	Clear Cache
@@ -24,9 +37,55 @@ void GPU::init() {
 	commandDurationLUT[0x80] = 4;	//	Copy Rectangle (VRAM to VRAM)
 	commandDurationLUT[0xa0] = 3;	//	Copy Rectangle (CPU to VRAM)
 	commandDurationLUT[0xc0] = 3;	//	Copy Rectangle (VRAM to CPU)
+
+	//	init SDL window
+	GPU::setupSDL();
+}
+
+void GPU::setupSDL() {
+	SDL_Init(SDL_INIT_VIDEO);
+	win = SDL_CreateWindow("q00.psx", 0, 78, 1024, 512, 0);
+	renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
+	img = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
+}
+
+void GPU::draw() {
+	// paint the image once every 30ms, i.e. 33 images per second
+	if (GPU::lastUpdateTime + 60 < SDL_GetTicks()) {
+		GPU::lastUpdateTime = SDL_GetTicks();
+
+		// event handling
+		SDL_Event e;
+		if (SDL_PollEvent(&e)) {
+		}
+
+		SDL_UpdateTexture(GPU::img, NULL, GPU::vram, VRAM_ROW_LENGTH * sizeof(u32));
+
+		// clear the screen
+		SDL_RenderClear(GPU::renderer);
+		// copy the texture to the rendering context
+		SDL_RenderCopy(renderer, img, NULL, NULL);
+		// flip the backbuffer
+		// this means that everything that we prepared behind the screens is actually shown
+		SDL_RenderPresent(GPU::renderer);
+	}
+}
+
+constexpr static u16 convertBGR24btoRGB16b(word bgr) {
+	u16 rgb =
+		RGB_8BIT_TO_5BIT(bgr & 0xff) << 10 |
+		RGB_8BIT_TO_5BIT((bgr >> 8) & 0xff) << 5 |
+		RGB_8BIT_TO_5BIT(bgr >> 16);
+	return rgb;
 }
 
 void GPU::sendCommandGP0(word cmd) {
+
+	/*
+		The 1MByte VRAM is organized as 512 lines of 2048 bytes (1024 pixels?) . 
+		It is accessed via coordinates, ranging from 
+		(0,0)=Upper-Left to (N,511)=Lower-Right.
+	*/
 
 	fifoBuffer.push_back(cmd);
 
@@ -41,16 +100,19 @@ void GPU::sendCommandGP0(word cmd) {
 		fifoBuffer.clear();
 	}
 	else if (cmdType == 0x02 && fifoBuffer.size() == 3) {
-		word bgr = 0xffffff & fifoBuffer[0];
-		u16 rgb = 
-			RGB_8BIT_TO_5BIT(bgr & 0xff) << 10 |
-			RGB_8BIT_TO_5BIT((bgr >> 8) & 0xff) << 5 |
-			RGB_8BIT_TO_5BIT(bgr >> 16);
+		u16 rgb = convertBGR24btoRGB16b(0xffffff & fifoBuffer[0]);
 		u8 yPos = fifoBuffer[1] >> 16;
-		u8 xPos = fifoBuffer[1] & 0xff;
+		u16 xPos = fifoBuffer[1] & 0xff * 0x10;
 		u8 ySiz = fifoBuffer[2] >> 16;
-		u8 xSiz = fifoBuffer[2] & 0xff;
-		console->debug("GP0 (02h) Fill Rectangle in VRAM\nXpos: {0:x}h, Ypos: {1:x}h, Xsiz: {2:x}h, Ysiz: {3:x}h, RGB: {4:x}h", yPos, xPos, ySiz, xSiz, rgb);
+		u16 xSiz = fifoBuffer[2] & 0xff * 0x10;
+
+		for (u32 yS = yPos; yS <= (u32)(yPos + ySiz); yS++) {
+			for (u32 xS = xPos; xS <= (u32)(xPos + xSiz); xS++) {
+				vram[yS * VRAM_ROW_LENGTH + xS] = rgb;
+			}
+		}
+
+		console->debug("GP0 (02h) Fill Rectangle in VRAM\nXpos: {0:x}h, Ypos: {1:x}h, Xsiz: {2:x}h, Ysiz: {3:x}h, RGB: {4:x}h", xPos, yPos, xSiz, ySiz, rgb);
 		fifoBuffer.clear();
 	}
 	else if (cmdType == 0x80 && fifoBuffer.size() == 4) {

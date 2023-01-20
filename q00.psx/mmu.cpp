@@ -55,7 +55,7 @@ class Mem {
 			return res;
 		}
 		virtual word readWord(word address) {
-			readWordLog(LOCALIZED_ADDRESS(address));
+			readWordLog(address);
 			return readWordWithoutLog(address);
 		};
 		virtual void storeByte(word address, byte data) {
@@ -124,6 +124,7 @@ class IO : public Mem {				//	8k - I/O
 
 		word readWord(word address) {
 			address = LOCALIZED_ADDRESS(address);
+			console->info("Reading from I/O {0:x}", address);
 
 			//	GPUREAD
 			if (address == 0x1810) {
@@ -133,6 +134,12 @@ class IO : public Mem {				//	8k - I/O
 			else if (address == 0x1814) {
 				return GPU::readGPUSTAT();
 			}
+		}
+
+		byte readByte(word address) {
+			address = LOCALIZED_ADDRESS(address);
+			console->info("Reading from I/O {0:x}", address);
+			return 0x00;
 		}
 } mIo;
 

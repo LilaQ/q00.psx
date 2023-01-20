@@ -23,6 +23,7 @@ int main(int argc, char* argv[]) {
 
     while (1) {
         R3000A::step();
+        GPU::draw();
     }
 
 }

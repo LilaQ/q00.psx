@@ -13,6 +13,8 @@ namespace GPU {
 	word readGPUSTAT();
 	word readGPUREAD();
 
+	void draw();
+
 }
 
 #endif

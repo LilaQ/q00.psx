@@ -44,7 +44,7 @@ void Opcode_BNE(byte rs, byte rt, i16 offset) {
 	if (CPU::registers.r[rs] != CPU::registers.r[rt]) {
 		CPU::registers.next_pc = tAddr;
 	}
-	console->debug("BNE {0:s}, {1:s}, ${2:04x}", REG(rs), REG(rt), tAddr);
+	console->debug("BNE {0:s}, {1:s}, ${2:04x} [rs: {3:04x}, rt: {4:04x}]", REG(rs), REG(rt), tAddr, rs, rt);
 }
 
 void Opcode_LUI(byte rt, u16 imm) {
@@ -95,15 +95,13 @@ void Opcode_SLL(byte rt, byte rd, byte sa) {
 
 void CPU::step() {
 
+	CPU::registers.log_pc = CPU::registers.pc;
+	word opcode = Memory::fetchOpcode(CPU::registers.pc);
+	console->info("Processing opcode {0:08x}", opcode);
+
 	//	branch delay slot
 	CPU::registers.pc = CPU::registers.next_pc;
 	CPU::registers.next_pc += 4;
-
-	word opcode = Memory::fetchOpcode(CPU::registers.pc);
-	console->warn("Processing opcode: 0x{0:08x}", opcode);
-
-	//char* ahoy = new char;
-	//std::cin >> ahoy;
 
 	//	decode the opcode
 	u8 rs = (opcode >> 21) & 0x1f;
@@ -327,7 +325,7 @@ void CPU::step() {
 //	Custom SpdLog Formatter to add PC etc. to CPU logs
 void CPU_PC_flag_formatter::format(const spdlog::details::log_msg&, const std::tm&, spdlog::memory_buf_t& dest) {
 	std::stringstream ss;
-	ss << std::hex << std::showbase << CPU::registers.pc;
+	ss << std::hex << std::showbase << CPU::registers.log_pc;
 	dest.append(ss.str());
 };
 
