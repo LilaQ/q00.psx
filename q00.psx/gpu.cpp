@@ -130,15 +130,15 @@ void GPU::sendCommandGP0(word cmd) {
 		if ((fifoBuffer.size() - 3) * 2 == expectedDataSize) {
 			std::vector<u16> data;
 			for (u16 row = 3; row < fifoBuffer.size(); row++) {
-				data.push_back(fifoBuffer[row >> 16]);
-				data.push_back(fifoBuffer[row & 0xffff]);
+				data.push_back(fifoBuffer[row] & 0xffff);
+				data.push_back(fifoBuffer[row] >> 16);
 			}
 			console->debug("GP0 (a0h) Copy Rectangle (CPU to VRAM)");
 			int c = 0;
 			for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
 				for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
 					console->info("data size : {0:x} - c: {1:x}", data.size(), c);
-					vram[(u32)yS * VRAM_ROW_LENGTH + (u32)xS] = data[c++];
+					vram[yS * VRAM_ROW_LENGTH + xS] = data[c++];
 				}
 			}
 			fifoBuffer.clear();
