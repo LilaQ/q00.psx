@@ -120,6 +120,11 @@ class IO : public Mem {				//	8k - I/O
 			else if (address == 0x1814) {
 				GPU::sendCommandGP1(data);
 			}
+
+			//	DMA Registers
+			else if (address >= 0x1080 && address < 0x1100) {
+				console->debug("DMA write at {0:x}", address);
+			}
 		}
 
 		word readWord(word address) {
@@ -133,6 +138,11 @@ class IO : public Mem {				//	8k - I/O
 			//	GPUSTAT
 			else if (address == 0x1814) {
 				return GPU::readGPUSTAT();
+			}
+
+			//	DMA Registers
+			else if (address >= 0x1080 && address < 0x1100) {
+				console->debug("DMA read at {0:x}", address);
 			}
 		}
 

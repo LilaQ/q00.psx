@@ -46,7 +46,7 @@ void GPU::setupSDL() {
 	SDL_Init(SDL_INIT_VIDEO);
 	win = SDL_CreateWindow("q00.psx", 0, 78, 1024, 512, 0);
 	renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
-	img = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
+	img = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGR555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
 }
 
 void GPU::draw() {
@@ -59,7 +59,7 @@ void GPU::draw() {
 		if (SDL_PollEvent(&e)) {
 		}
 
-		SDL_UpdateTexture(GPU::img, NULL, GPU::vram, VRAM_ROW_LENGTH * sizeof(u32));
+		SDL_UpdateTexture(GPU::img, NULL, GPU::vram, VRAM_ROW_LENGTH * sizeof(u16));
 
 		// clear the screen
 		SDL_RenderClear(GPU::renderer);
@@ -106,8 +106,8 @@ void GPU::sendCommandGP0(word cmd) {
 		u8 ySiz = fifoBuffer[2] >> 16;
 		u16 xSiz = fifoBuffer[2] & 0xff * 0x10;
 
-		for (u32 yS = yPos; yS <= (u32)(yPos + ySiz); yS++) {
-			for (u32 xS = xPos; xS <= (u32)(xPos + xSiz); xS++) {
+		for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
+			for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
 				vram[yS * VRAM_ROW_LENGTH + xS] = rgb;
 			}
 		}
@@ -119,9 +119,30 @@ void GPU::sendCommandGP0(word cmd) {
 		console->debug("GP0 (80h) Copy Rectangle (VRAM to VRAM)\nXpos: {0:x}, Ypos: {1:x}, Xsiz: {2:x}");
 		fifoBuffer.clear();
 	}
-	else if (cmdType == 0xa0 && fifoBuffer.size() == 3) {
-		console->debug("GP0 (a0h) Copy Rectangle (CPU to VRAM)");
-		fifoBuffer.clear();
+	else if (cmdType == 0xa0 && fifoBuffer.size() > 3 ) {
+		//	calculate if the data is done already, or if we are expecting more
+		//	data being sent to GPU via command
+		u8 yPos = fifoBuffer[1] >> 16;
+		u16 xPos = fifoBuffer[1] & 0xff;
+		u8 ySiz = fifoBuffer[2] >> 16;
+		u16 xSiz = fifoBuffer[2] & 0xff;
+		u16 expectedDataSize = xSiz * ySiz;
+		if ((fifoBuffer.size() - 3) * 2 == expectedDataSize) {
+			std::vector<u16> data;
+			for (u16 row = 3; row < fifoBuffer.size(); row++) {
+				data.push_back(fifoBuffer[row >> 16]);
+				data.push_back(fifoBuffer[row & 0xffff]);
+			}
+			console->debug("GP0 (a0h) Copy Rectangle (CPU to VRAM)");
+			int c = 0;
+			for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
+				for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
+					console->info("data size : {0:x} - c: {1:x}", data.size(), c);
+					vram[(u32)yS * VRAM_ROW_LENGTH + (u32)xS] = data[c++];
+				}
+			}
+			fifoBuffer.clear();
+		}
 	}
 	else if (cmdType == 0xc0 && fifoBuffer.size() == 3) {
 		console->debug("GP0 (c0h) Copy Rectangle (VRAM to CPU)");
