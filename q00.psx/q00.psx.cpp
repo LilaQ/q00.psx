@@ -18,8 +18,26 @@ int main(int argc, char* argv[]) {
     R3000A::init();
     Memory::init();
     GPU::init();
-
-    FileImport::loadEXE("CPUOR.exe");
+    
+    //  FileImport::loadEXE("CPUADD.exe");  - PASSED
+    //  FileImport::loadEXE("CPUADDI.exe"); - PASSED
+    //  FileImport::loadEXE("CPUADDIU.exe");- PASSED
+    //  FileImport::loadEXE("CPUADDU.exe"); - PASSED
+    //  FileImport::loadEXE("CPUAND.exe");  - PASSED
+    //  FileImport::loadEXE("CPUANDI.exe"); - PASSED
+    //  FileImport::loadEXE("CPUDIV.exe");  - PASSED
+    //  FileImport::loadEXE("CPUDIVU.exe"); - PASSED
+    //  FileImport::loadEXE("CPUNOR.exe");  - PASSED
+    //  FileImport::loadEXE("CPUOR.exe");   - PASSED
+    //  FileImport::loadEXE("CPUORI.exe");  - PASSED
+    //  FileImport::loadEXE("CPUSLL.exe");  - PASSED
+    //  FileImport::loadEXE("CPUSLLV.exe"); - PASSED
+    //  FileImport::loadEXE("CPUSRL.exe");  - PASSED
+    //  FileImport::loadEXE("CPUSRA.exe");  - PASSED
+    FileImport::loadEXE("CPUSRAV.exe");
+    //  FileImport::loadEXE("CPUSRLV.exe"); - PASSED
+    //  FileImport::loadEXE("CPUXOR.exe");  - PASSED
+    //  FileImport::loadEXE("CPUXORI.exe"); - PASSED
 
     while (1) {
         R3000A::step();

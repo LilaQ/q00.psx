@@ -46,7 +46,7 @@ void GPU::setupSDL() {
 	SDL_Init(SDL_INIT_VIDEO);
 	win = SDL_CreateWindow("q00.psx", 0, 78, 1024, 512, 0);
 	renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
-	img = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGR555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
+	img = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR1555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
 }
 
 void GPU::draw() {
@@ -86,7 +86,6 @@ void GPU::sendCommandGP0(word cmd) {
 		It is accessed via coordinates, ranging from 
 		(0,0)=Upper-Left to (N,511)=Lower-Right.
 	*/
-
 	fifoBuffer.push_back(cmd);
 
 	word cmdType = GPU_COMMAND_TYPE(fifoBuffer.front());
@@ -101,10 +100,10 @@ void GPU::sendCommandGP0(word cmd) {
 	}
 	else if (cmdType == 0x02 && fifoBuffer.size() == 3) {
 		u16 rgb = convertBGR24btoRGB16b(0xffffff & fifoBuffer[0]);
-		u8 yPos = fifoBuffer[1] >> 16;
-		u16 xPos = fifoBuffer[1] & 0xff * 0x10;
-		u8 ySiz = fifoBuffer[2] >> 16;
-		u16 xSiz = fifoBuffer[2] & 0xff * 0x10;
+		u16 yPos = fifoBuffer[1] >> 16;
+		u16 xPos = fifoBuffer[1] & 0xffff * 0x10;
+		u16 ySiz = fifoBuffer[2] >> 16;
+		u16 xSiz = fifoBuffer[2] & 0xffff * 0x10;
 
 		for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
 			for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
@@ -122,10 +121,10 @@ void GPU::sendCommandGP0(word cmd) {
 	else if (cmdType == 0xa0 && fifoBuffer.size() > 3 ) {
 		//	calculate if the data is done already, or if we are expecting more
 		//	data being sent to GPU via command
-		u8 yPos = fifoBuffer[1] >> 16;
-		u16 xPos = fifoBuffer[1] & 0xff;
-		u8 ySiz = fifoBuffer[2] >> 16;
-		u16 xSiz = fifoBuffer[2] & 0xff;
+		u16 yPos = fifoBuffer[1] >> 16;
+		u16 xPos = fifoBuffer[1] & 0xffff;
+		u16 ySiz = fifoBuffer[2] >> 16;
+		u16 xSiz = fifoBuffer[2] & 0xffff;
 		u16 expectedDataSize = xSiz * ySiz;
 		if ((fifoBuffer.size() - 3) * 2 == expectedDataSize) {
 			std::vector<u16> data;
@@ -137,7 +136,6 @@ void GPU::sendCommandGP0(word cmd) {
 			int c = 0;
 			for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
 				for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
-					console->info("data size : {0:x} - c: {1:x}", data.size(), c);
 					vram[yS * VRAM_ROW_LENGTH + xS] = data[c++];
 				}
 			}

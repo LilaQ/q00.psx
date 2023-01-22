@@ -41,7 +41,7 @@ void FileImport::loadEXE(const char filename[]) {
 	R3000A::registers.gp = initialGP;
 	R3000A::registers.sp = initialSPBase + initialSPOffs;
 
-	Memory::loadToRAM(ramStart, file, FILE_DATA_START, FILE_DATA_SIZE(fileSize));
+	Memory::loadToRAM(ramStart, file, FILE_DATA_START, fileSize);
 }
 
 byte* FileImport::loadFile(const char filename[]) {
