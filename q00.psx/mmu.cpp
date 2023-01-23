@@ -33,6 +33,9 @@ class Mem {
 		virtual void readByteLog(word address) {
 			memConsole->debug("Reading from 0x{0:x}", address);
 		};
+		virtual void readHalfwordLog(word address) {
+			memConsole->debug("Reading from 0x{0:x}", address);
+		};
 		virtual void readWordLog(word address) {
 			memConsole->debug("Reading from 0x{0:x}", address);
 		};
@@ -46,6 +49,12 @@ class Mem {
 		virtual byte readByte(word address) {
 			readByteLog(LOCALIZED_ADDRESS(address));
 			return memory[LOCALIZED_ADDRESS(address)];
+		};
+		virtual hword readHalfword(word address) {
+			readHalfwordLog(LOCALIZED_ADDRESS(address));
+			hword res = memory[LOCALIZED_ADDRESS(address)];
+			res |= memory[LOCALIZED_ADDRESS(address + 1)] << 8;
+			return res;
 		};
 		virtual word readWordWithoutLog(word address) {
 			word res = memory[LOCALIZED_ADDRESS(address)];
@@ -205,6 +214,11 @@ constexpr Mem* getMemoryRegion(word address) {
 byte Memory::fetchByte(word address) {
 	Mem* region = getMemoryRegion(address);
 	return region->readByte(address);
+}
+
+hword Memory::fetchHalfword(word address) {
+	Mem* region = getMemoryRegion(address);
+	return region->readHalfword(address);
 }
 
 word Memory::fetchWord(word address) {

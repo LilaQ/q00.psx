@@ -7,11 +7,11 @@ namespace Memory {
 
 	void init();
 	
+	byte fetchByte(word address);
 	word fetchOpcode(word address);
+	hword fetchHalfword(word address);
 	word fetchWord(word address);
 	void storeWord(word address, word data);
-
-	byte fetchByte(word address);
 
 	void loadToRAM(word, byte*, word, word);
 }
