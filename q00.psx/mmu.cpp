@@ -71,6 +71,11 @@ class Mem {
 			storeByteLog(LOCALIZED_ADDRESS(address), data);
 			memory[LOCALIZED_ADDRESS(address)] = data;
 		};
+		virtual void storeHalfword(word address, hword data) {
+			storeWordLog(LOCALIZED_ADDRESS(address), data);
+			memory[LOCALIZED_ADDRESS(address)] = data & 0xff;
+			memory[LOCALIZED_ADDRESS(address + 1)] = (data >> 8) & 0xff;
+		};
 		virtual void storeWord(word address, word data) {
 			storeWordLog(LOCALIZED_ADDRESS(address), data);
 			memory[LOCALIZED_ADDRESS(address)] = data & 0xff;
@@ -217,11 +222,13 @@ byte Memory::fetchByte(word address) {
 }
 
 hword Memory::fetchHalfword(word address) {
+	address &= 0xffff'fffe;
 	Mem* region = getMemoryRegion(address);
 	return region->readHalfword(address);
 }
 
 word Memory::fetchWord(word address) {
+	address &= 0xffff'fffc;
 	Mem* region = getMemoryRegion(address);
 	return region->readWord(address);
 }
@@ -230,7 +237,21 @@ word Memory::fetchOpcode(word address) {
 	return mRam.readWordWithoutLog(address);
 }
 
+
+
+void Memory::storeByte(word address, byte data) {
+	Mem* region = getMemoryRegion(address);
+	region->storeByte(address, data);
+}
+
+void Memory::storeHalfword(word address, hword data) {
+	address &= 0xffff'fffe;
+	Mem* region = getMemoryRegion(address);
+	region->storeHalfword(address, data);
+}
+
 void Memory::storeWord(word address, word data) {
+	address &= 0xffff'fffc;
 	Mem* region = getMemoryRegion(address);
 	region->storeWord(address, data);
 }

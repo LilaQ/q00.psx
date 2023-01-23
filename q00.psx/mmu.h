@@ -11,6 +11,9 @@ namespace Memory {
 	word fetchOpcode(word address);
 	hword fetchHalfword(word address);
 	word fetchWord(word address);
+
+	void storeByte(word address, byte data);
+	void storeHalfword(word address, hword data);
 	void storeWord(word address, word data);
 
 	void loadToRAM(word, byte*, word, word);

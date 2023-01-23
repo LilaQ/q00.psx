@@ -91,6 +91,12 @@ void Opcode_LBU(byte base, byte rt, i16 offset) {
 	CPU::registers.r[rt] = Memory::fetchByte(vAddr);
 }
 
+void Opcode_SB(byte rt, i16 offset, byte base) {
+	console->debug("SB {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
+	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
+	Memory::storeByte(vAddr, CPU::registers.r[rt] & 0xff);
+}
+
 void Opcode_LH(byte rt, i16 offset, byte base) {
 	console->debug("LH {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
@@ -103,29 +109,56 @@ void Opcode_LHU(byte rt, i16 offset, byte base) {
 	CPU::registers.r[rt] = Memory::fetchHalfword(vAddr);
 }
 
+void Opcode_SH(byte rt, i16 offset, byte base) {
+	console->debug("SH {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
+	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
+	Memory::storeHalfword(vAddr, CPU::registers.r[rt] & 0xffff);
+}
+
 void Opcode_LW(byte base, byte rt, i16 offset) {
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
 	console->debug("LW {0:s}, ${1:04x} ({2:s}) [{3:08x}] @ vAddr: {4:08x}", REG(rt), offset, REG(base), Memory::fetchWord(vAddr), vAddr);
 	CPU::registers.r[rt] = Memory::fetchWord(vAddr);
 }
 
-//	die in hell you piece of poop
 void Opcode_LWL(byte rt, i16 offset, byte base) {
 	console->debug("LWL {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = CPU::registers.r[base] + SIGN_EXT32(offset);
-	const u8 shift = 8 * (vAddr % 4);
+	const u8 shift = 8 * offset;
 
-	word hi = Memory::fetchWord(vAddr) << shift;
-	word lo = CPU::registers.r[rt] & (0xffff'ffff >> shift);
+	word hi = Memory::fetchWord(vAddr) << (24 - shift);
+	word lo = CPU::registers.r[rt] & (0xff'ffff >> shift);
 
 	CPU::registers.r[rt] = hi | lo;
 }
 
 void Opcode_LWR(byte rt, i16 offset, byte base) {
 	console->debug("LWR {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
-	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
-	CPU::registers.r[rt] = (Memory::fetchWord(vAddr) & 0xff) | (CPU::registers.r[rt] & 0xffff'ff00);
+	word vAddr = CPU::registers.r[base] + SIGN_EXT32(offset);
+	const u8 shift = 8 * offset;
+
+	word hi = Memory::fetchWord(vAddr) >> shift;
+	word lo = CPU::registers.r[rt] & ((u64)0xffff'ffff << (32 - shift));
+
+	CPU::registers.r[rt] = hi | lo;
 }
+
+void Opcode_SWL(byte rt, i16 offset, byte base) {
+	console->debug("SWL {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
+	word vAddr = CPU::registers.r[base] + SIGN_EXT32(offset);
+	const u8 shift = 8 * offset;
+	word content = Memory::fetchWord(vAddr) & ((u64)0xffff'ffff << (8 + shift));
+	Memory::storeWord(vAddr, (CPU::registers.r[rt] >> (24 - shift)) | content);
+}
+
+void Opcode_SWR(byte rt, i16 offset, byte base) {
+	console->debug("SWR {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
+	word vAddr = CPU::registers.r[base] + SIGN_EXT32(offset);
+	const u8 shift = 8 * offset;
+	word content = Memory::fetchWord(vAddr) & ((u64)0xffff'ffff >> (32 - shift));
+	Memory::storeWord(vAddr, (CPU::registers.r[rt] << shift) | content);
+}
+
 
 void Opcode_ANDI(byte rt, byte rs, u16 imm) {
 	console->debug("ANDI {0:s}, {1:s}, ${2:04x}", REG(rt), REG(rs), imm);
@@ -296,17 +329,9 @@ void CPU::step() {
 
 				case 0x00: opcode == 0 ? Opcode_NOP() : Opcode_SLL(rd, rt, imm5); break;
 				case 0x02: Opcode_SRL(rd, rt, imm5);  break;
-
-				//	SRA
 				case 0x03: Opcode_SRA(rd, rt, imm5); break;
-
-				//	SLLV
 				case 0x04: Opcode_SLLV(rd, rt, rs); break;
-
-				//	SRLV
 				case 0x06: Opcode_SRLV(rd, rt, rs);  break;
-
-				//	SRAV
 				case 0x07: Opcode_SRAV(rd, rt, rs); break;
 
 				//	JR
@@ -333,40 +358,17 @@ void CPU::step() {
 				//	MTLO
 				case 0x13:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-				//	MULT
 				case 0x18: Opcode_MULT(rs, rt); break;
-
-				//	MULTU
 				case 0x19: Opcode_MULTU(rs, rt); break;
-
-				//	DIV
 				case 0x1a: Opcode_DIV(rs, rt); break;
-
-				//	DIVU
 				case 0x1b: Opcode_DIVU(rs, rt); break;
-
-				//	ADD
 				case 0x20: Opcode_ADD(rd, rs, rt); break;
-
-				//	ADDU
 				case 0x21: Opcode_ADDU(rs, rt, rd); break;
-
-				//	SUB
 				case 0x22: Opcode_SUB(rd, rs, rt); break;
-
-				//	SUBU
 				case 0x23: Opcode_SUBU(rd, rs, rt); break;
-
-				//	AND
 				case 0x24: Opcode_AND(rd, rs, rt); break;
-
-				//	OR
 				case 0x25: Opcode_OR(rd, rs, rt); break;
-
-				//	XOR
 				case 0x26: Opcode_XOR(rd, rs, rt); break;
-
-				//	NOR
 				case 0x27: Opcode_NOR(rd, rs, rt); break;
 
 				//	SLT
@@ -388,22 +390,14 @@ void CPU::step() {
 		//	JAL
 		case 0x03:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	BEQ
 		case 0x04: Opcode_BEQ(rs, rt, imm16); break;
-
-		//	BNE
 		case 0x05: Opcode_BNE(rs, rt, imm16); break;
 
 		//	BLEZ
 		case 0x06:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	BGTZ
 		case 0x07: Opcode_BGTZ(rs, imm16); break;
-
-		//	ADDI
 		case 0x08: Opcode_ADDI(rt, rs, imm16); break;
-
-		//	ADDIU
 		case 0x09: Opcode_ADDIU(rt, rs, imm16); break;
 
 		//	SLTI
@@ -412,16 +406,9 @@ void CPU::step() {
 		//	SLTIU
 		case 0x0b:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	ANDI
 		case 0x0c: Opcode_ANDI(rt, rs, imm16); break;
-
-		//	ORI
 		case 0x0d: Opcode_ORI(rt, rs, imm16); break;
-
-		//	XORI 
 		case 0x0e: Opcode_XORI(rt, rs, imm16); break;
-
-		//	LUI
 		case 0x0f: Opcode_LUI(rt, imm16); break;
 
 		//	COP0
@@ -436,38 +423,18 @@ void CPU::step() {
 		//	COP3
 		case 0x13:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	LB
 		case 0x20: Opcode_LB(rt, imm16, rs); break;
-
-		//	LH
 		case 0x21: Opcode_LH(rt, imm16, rs); break;
-
-		//	LWL
 		case 0x22: Opcode_LWL(rt, imm16, rs); break;
-
 		case 0x23: Opcode_LW(rs, rt, imm16); break;
 		case 0x24: Opcode_LBU(rs, rt, imm16); break;
-
-		//	LHU
 		case 0x25: Opcode_LHU(rt, imm16, rs); break;
-
-		//	LWR 
 		case 0x26: Opcode_LWR(rt, imm16, rs); break;
-
-		//	SB
-		case 0x28:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-		//	SH
-		case 0x29:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-		//	SWL
-		case 0x2a:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-		//	SW
+		case 0x28: Opcode_SB(rt, imm16, rs); break;
+		case 0x29: Opcode_SH(rt, imm16, rs); break;
+		case 0x2a: Opcode_SWL(rt, imm16, rs); break;
 		case 0x2b: Opcode_SW(rs, rt, imm16); break;
-
-		//	SWR
-		case 0x2e:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+		case 0x2e: Opcode_SWR(rt, imm16, rs); break;
 
 		//	LWC0
 		case 0x30:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;

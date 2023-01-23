@@ -29,12 +29,15 @@ int main(int argc, char* argv[]) {
     //  FileImport::loadEXE("CPUDIVU.exe"); - PASSED
     //  FileImport::loadEXE("CPULB.exe");   - PASSED
     //  FileImport::loadEXE("CPULH.exe");   - PASSED
-    FileImport::loadEXE("CPULW.exe");
+    //  FileImport::loadEXE("CPULW.exe");   - PASSED
     //  FileImport::loadEXE("CPUMULT.exe"); - PASSED
     //  FileImport::loadEXE("CPUMULTU.exe");- PASSED
     //  FileImport::loadEXE("CPUNOR.exe");  - PASSED
     //  FileImport::loadEXE("CPUOR.exe");   - PASSED
     //  FileImport::loadEXE("CPUORI.exe");  - PASSED
+    //  FileImport::loadEXE("CPUSB.exe");   - PASSED
+    //  FileImport::loadEXE("CPUSH.exe");   - PASSED
+    //  FileImport::loadEXE("CPUSW.exe");   - PASSED
     //  FileImport::loadEXE("CPUSLL.exe");  - PASSED
     //  FileImport::loadEXE("CPUSLLV.exe"); - PASSED
     //  FileImport::loadEXE("CPUSRL.exe");  - PASSED
