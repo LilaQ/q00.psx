@@ -273,6 +273,16 @@ void Opcode_MFHI(byte rd) {
 	CPU::registers.r[rd] = CPU::registers.hi;
 }
 
+void Opcode_MTLO(byte rs) {
+	console->debug("MTLO {0:s}", REG(rs));
+	CPU::registers.lo = CPU::registers.r[rs];
+}
+
+void Opcode_MTHI(byte rs) {
+	console->debug("MTHI {0:s}", REG(rs));
+	CPU::registers.hi = CPU::registers.r[rs];
+}
+
 void Opcode_SLL(byte rd, byte rt, byte sa) {
 	console->debug("SLL {0:s}, {1:s}, ${2:04x}", REG(rd), REG(rt), sa);
 	CPU::registers.r[rd] = CPU::registers.r[rt] << sa;
@@ -346,18 +356,10 @@ void CPU::step() {
 				//	BREAK
 				case 0x0d:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-				//	MFHI
 				case 0x10: Opcode_MFHI(rd); break;
-
-				//	MTHI
-				case 0x11: console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-				//	MFLO
+				case 0x11: Opcode_MTHI(rs); break;
 				case 0x12: Opcode_MFLO(rd); break;
-
-				//	MTLO
-				case 0x13:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
+				case 0x13: Opcode_MTLO(rs); break;
 				case 0x18: Opcode_MULT(rs, rt); break;
 				case 0x19: Opcode_MULTU(rs, rt); break;
 				case 0x1a: Opcode_DIV(rs, rt); break;

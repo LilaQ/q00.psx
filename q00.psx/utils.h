@@ -5,6 +5,7 @@
 
 namespace Utils {
 	word readWord(byte* mem, word address);
+	char readChar(byte* mem, word address);
 }
 
 #endif

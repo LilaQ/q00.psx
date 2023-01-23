@@ -17,6 +17,7 @@ namespace Memory {
 	void storeWord(word address, word data);
 
 	void loadToRAM(word, byte*, word, word);
+	void loadBIOS(byte* source, word size);
 }
 
 #endif

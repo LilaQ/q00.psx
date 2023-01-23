@@ -5,6 +5,7 @@
 
 namespace FileImport {
 	void loadEXE(const char[]);
+	void loadBIOS(const char[]);
 	byte* loadFile(const char[]);
 }
 

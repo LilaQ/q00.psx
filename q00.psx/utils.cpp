@@ -12,3 +12,7 @@ word Utils::readWord(byte* mem, word address) {
 	res |= mem[address];
 	return res;
 }
+
+char Utils::readChar(byte* mem, word address) {
+	return mem[address];
+}

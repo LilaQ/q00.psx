@@ -185,8 +185,11 @@ class Expe : public Mem {			//	2048k - Expansion Region 3
 		}
 } mExpe;
 
-class BIOS : public Mem {			//	2048k - Expansion Region 3
+class BIOS : public Mem {			//	512k - BIOS ROM
 	public:
+		void load(byte* source, word size) {
+			memcpy(&memory[0x0000], &source, sizeof(byte) * size);
+		}
 		BIOS() {
 			memory = new u8[0x80'000];
 			addressMask = 0x7'ffff;
@@ -259,4 +262,9 @@ void Memory::storeWord(word address, word data) {
 void Memory::loadToRAM(word targetAddress, byte* source, word offset, word size) {
 	mRam.load(targetAddress, source, offset, size);
 	console->info("Done loading to RAM");
+}
+
+void Memory::loadBIOS(byte* source, word size) {
+	mBios.load(source, size);
+	console->info("Done loading BIOS");
 }

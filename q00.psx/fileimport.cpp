@@ -44,6 +44,22 @@ void FileImport::loadEXE(const char filename[]) {
 	Memory::loadToRAM(ramStart, file, FILE_DATA_START, fileSize);
 }
 
+void FileImport::loadBIOS(const char filename[]) {
+	byte* file = FileImport::loadFile(filename);
+
+	word kernelBCDdate = Utils::readWord(file, 0x100);
+	word consoleType = Utils::readWord(file, 0x104);
+	std::string versionString = "";
+	word verPos = 0x108;
+	while (verPos < 0x150) {
+		versionString += Utils::readChar(file, verPos++);
+	}
+
+	console->info("Kernel BCD Date: {0:x}", kernelBCDdate);
+	console->info("Console type: {0:x}", consoleType);
+	console->info("Version: {0:s}", versionString);
+}
+
 byte* FileImport::loadFile(const char filename[]) {
 	streampos size;
 	byte* fileInMemory = new byte;

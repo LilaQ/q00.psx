@@ -15,6 +15,7 @@ int main(int argc, char* argv[]) {
     console->info("Starting q00.psx...");
 
     //  Component init
+    FileImport::loadBIOS("scph1001.bin");
     R3000A::init();
     Memory::init();
     GPU::init();
