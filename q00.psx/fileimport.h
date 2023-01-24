@@ -4,9 +4,16 @@
 #include "defs.h"
 
 namespace FileImport {
+
+	typedef struct {
+		byte* ptr;
+		int size;
+	} PSX_FILE;
+
 	void loadEXE(const char[]);
 	void loadBIOS(const char[]);
-	byte* loadFile(const char[]);
+	PSX_FILE loadFile(const char[]);
+
 }
 
 #endif

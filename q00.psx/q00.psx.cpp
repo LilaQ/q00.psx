@@ -11,7 +11,7 @@ int main(int argc, char* argv[]) {
     //  Logger init
     auto console = spdlog::stdout_color_mt("Main");
     spdlog::set_pattern("[%T:%e] [%n] [%^%l%$] %v");
-    //spdlog::set_level(spdlog::level::debug);
+    spdlog::set_level(spdlog::level::debug);
     console->info("Starting q00.psx...");
 
     //  Component init

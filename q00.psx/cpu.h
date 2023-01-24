@@ -7,12 +7,12 @@
 namespace R3000A {
 
 	struct Registers {
-		u32 r[28] = { 0x00 };
+		u32 r[32] = { 0x00 };
 
-		u32 gp = 0x00;
-		u32 sp = 0x00;
-		u32 fp = 0x00;
-		u32 ra = 0x00;
+		const int gp = 28;
+		const int sp = 29;
+		const int fp = 30;
+		const int ra = 31;
 
 		u32 pc = 0x00;
 		u32 next_pc = 0x00;		//	used for branch delay slot

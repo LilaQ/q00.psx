@@ -11,6 +11,7 @@
 #define REG(a) REG_LUT[a]
 #define PRIMARY_OPCODE(opcode) opcode >> 26
 #define SECONDARY_OPCODE(opcode) opcode & 0x3f
+#define COP_COMMAND(opcode) opcode & 0x4000'0000
 
 namespace CPU {
 	Registers registers;
@@ -33,7 +34,8 @@ static const char* REG_LUT[] = {
 	"t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7",
 	"s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7",
 	"t8", "t9",
-	"k0", "k1"
+	"k0", "k1",
+	"gp", "sp", "fp", "ra"
 };
 
 
@@ -44,7 +46,7 @@ void Opcode_NOP() {
 }
 
 void Opcode_J(u32 target) {
-	word tAddr = (CPU::registers.next_pc & 0xe000'0000) | (target << 2);
+	word tAddr = (CPU::registers.next_pc & 0xf000'0000) | (target << 2);
 	CPU::registers.next_pc = tAddr;
 	console->debug("J {0:08x} [{1:08x}]", target, tAddr);
 }
@@ -313,6 +315,8 @@ void Opcode_SRLV(byte rd, byte rt, byte rs) {
 	CPU::registers.r[rd] = CPU::registers.r[rt] >> (CPU::registers.r[rs] & 0x1f);
 }
 
+
+
 void CPU::step() {
 
 	CPU::registers.log_pc = CPU::registers.pc;
@@ -331,100 +335,119 @@ void CPU::step() {
 	u32 imm26 = opcode & 0x3ff'ffff;
 	i16 imm16 = opcode & 0xffff;	//	offset
 
-	switch (PRIMARY_OPCODE(opcode)) {
+	//	COP
+	if (COP_COMMAND(opcode)) {
+		switch (opcode) {
+		case 0x10:
+		case 0x11:
+		case 0x12:
+		case 0x13:
+			u8 COP_ID = (PRIMARY_OPCODE(opcode) >> 26) & 0xff;
+			switch (rs) {
+			case 0x0: console->debug("MFCn {0:x}", COP_ID); exit(1); break;
+			case 0x2: console->debug("CFCn {0:x}", COP_ID); exit(1); break;
+			case 0x4: console->debug("MTCn {0:x}", COP_ID); exit(1); break;
+			case 0x6: console->debug("CTCn {0:x}", COP_ID); exit(1); break;
+			case 0x8:
+				switch (rt) {
+				case 0x00: console->debug("BCnF {0:x}", COP_ID); exit(1); break;
+				case 0x01: console->debug("BCnF {0:x}", COP_ID); exit(1); break;
+				}
+				break;
+			case 0x10000:
+				switch (SECONDARY_OPCODE(opcode)) {
+				case 0x01: console->debug("COP0 TLBR (illegal)"); exit(1); break;
+				case 0x02: console->debug("COP0 TLBWI (illegal)"); exit(1); break;
+				case 0x06: console->debug("COP0 TLBWR (illegal)"); exit(1); break;
+				case 0x08: console->debug("COP0 TLBP (illegal)"); exit(1); break;
+				case 0x10: console->debug("COP0 RFE"); exit(1); break;
+				}
+			}
+		}
+	}
+	//	CPU
+	else {
+		switch (PRIMARY_OPCODE(opcode)) {
 
-		//	SPECIAL
+			//	SPECIAL
 		case 0x00: {
 			switch (SECONDARY_OPCODE(opcode)) {
 
-				case 0x00: opcode == 0 ? Opcode_NOP() : Opcode_SLL(rd, rt, imm5); break;
-				case 0x02: Opcode_SRL(rd, rt, imm5);  break;
-				case 0x03: Opcode_SRA(rd, rt, imm5); break;
-				case 0x04: Opcode_SLLV(rd, rt, rs); break;
-				case 0x06: Opcode_SRLV(rd, rt, rs);  break;
-				case 0x07: Opcode_SRAV(rd, rt, rs); break;
+			case 0x00: opcode == 0 ? Opcode_NOP() : Opcode_SLL(rd, rt, imm5); break;
+			case 0x02: Opcode_SRL(rd, rt, imm5);  break;
+			case 0x03: Opcode_SRA(rd, rt, imm5); break;
+			case 0x04: Opcode_SLLV(rd, rt, rs); break;
+			case 0x06: Opcode_SRLV(rd, rt, rs);  break;
+			case 0x07: Opcode_SRAV(rd, rt, rs); break;
 
 				//	JR
-				case 0x08:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			case 0x08:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
 				//	JALR
-				case 0x09:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			case 0x09:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
 				//	SYSCALL
-				case 0x0c:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			case 0x0c:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
 				//	BREAK
-				case 0x0d:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			case 0x0d:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-				case 0x10: Opcode_MFHI(rd); break;
-				case 0x11: Opcode_MTHI(rs); break;
-				case 0x12: Opcode_MFLO(rd); break;
-				case 0x13: Opcode_MTLO(rs); break;
-				case 0x18: Opcode_MULT(rs, rt); break;
-				case 0x19: Opcode_MULTU(rs, rt); break;
-				case 0x1a: Opcode_DIV(rs, rt); break;
-				case 0x1b: Opcode_DIVU(rs, rt); break;
-				case 0x20: Opcode_ADD(rd, rs, rt); break;
-				case 0x21: Opcode_ADDU(rs, rt, rd); break;
-				case 0x22: Opcode_SUB(rd, rs, rt); break;
-				case 0x23: Opcode_SUBU(rd, rs, rt); break;
-				case 0x24: Opcode_AND(rd, rs, rt); break;
-				case 0x25: Opcode_OR(rd, rs, rt); break;
-				case 0x26: Opcode_XOR(rd, rs, rt); break;
-				case 0x27: Opcode_NOR(rd, rs, rt); break;
+			case 0x10: Opcode_MFHI(rd); break;
+			case 0x11: Opcode_MTHI(rs); break;
+			case 0x12: Opcode_MFLO(rd); break;
+			case 0x13: Opcode_MTLO(rs); break;
+			case 0x18: Opcode_MULT(rs, rt); break;
+			case 0x19: Opcode_MULTU(rs, rt); break;
+			case 0x1a: Opcode_DIV(rs, rt); break;
+			case 0x1b: Opcode_DIVU(rs, rt); break;
+			case 0x20: Opcode_ADD(rd, rs, rt); break;
+			case 0x21: Opcode_ADDU(rs, rt, rd); break;
+			case 0x22: Opcode_SUB(rd, rs, rt); break;
+			case 0x23: Opcode_SUBU(rd, rs, rt); break;
+			case 0x24: Opcode_AND(rd, rs, rt); break;
+			case 0x25: Opcode_OR(rd, rs, rt); break;
+			case 0x26: Opcode_XOR(rd, rs, rt); break;
+			case 0x27: Opcode_NOR(rd, rs, rt); break;
 
 				//	SLT
-				case 0x2a:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			case 0x2a:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
 				//	SLTU
-				case 0x2b:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			case 0x2b:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
 			}
 			break;
 		}
 
-		//	BcondZ
+				 //	BcondZ
 		case 0x01:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	J
+			//	J
 		case 0x02: Opcode_J(imm26); break;
 
-		//	JAL
+			//	JAL
 		case 0x03:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
 		case 0x04: Opcode_BEQ(rs, rt, imm16); break;
 		case 0x05: Opcode_BNE(rs, rt, imm16); break;
 
-		//	BLEZ
+			//	BLEZ
 		case 0x06:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
 		case 0x07: Opcode_BGTZ(rs, imm16); break;
 		case 0x08: Opcode_ADDI(rt, rs, imm16); break;
 		case 0x09: Opcode_ADDIU(rt, rs, imm16); break;
 
-		//	SLTI
+			//	SLTI
 		case 0x0a:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	SLTIU
+			//	SLTIU
 		case 0x0b:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
 		case 0x0c: Opcode_ANDI(rt, rs, imm16); break;
 		case 0x0d: Opcode_ORI(rt, rs, imm16); break;
 		case 0x0e: Opcode_XORI(rt, rs, imm16); break;
 		case 0x0f: Opcode_LUI(rt, imm16); break;
-
-		//	COP0
-		case 0x10:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-		//	COP1
-		case 0x11:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-		//	COP2
-		case 0x12:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-		//	COP3
-		case 0x13:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
 		case 0x20: Opcode_LB(rt, imm16, rs); break;
 		case 0x21: Opcode_LH(rt, imm16, rs); break;
 		case 0x22: Opcode_LWL(rt, imm16, rs); break;
@@ -438,30 +461,33 @@ void CPU::step() {
 		case 0x2b: Opcode_SW(rs, rt, imm16); break;
 		case 0x2e: Opcode_SWR(rt, imm16, rs); break;
 
-		//	LWC0
+			//	LWC0
 		case 0x30:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	LWC1
+			//	LWC1
 		case 0x31:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	LWC2
+			//	LWC2
 		case 0x32:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	LWC3
-		case 0x33:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			//	LWC3
+		case 0x33:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode));
+			//exit(1);  
+			break;
 
-		//	SWC0
+			//	SWC0
 		case 0x38:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	SWC1
+			//	SWC1
 		case 0x39:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	SWC2
+			//	SWC2
 		case 0x3a:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-		//	SWC3
+			//	SWC3
 		case 0x3b:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
+		}
 	}
 }
 

@@ -188,7 +188,7 @@ class Expe : public Mem {			//	2048k - Expansion Region 3
 class BIOS : public Mem {			//	512k - BIOS ROM
 	public:
 		void load(byte* source, word size) {
-			memcpy(&memory[0x0000], &source, sizeof(byte) * size);
+			memcpy(&memory[0x0000], &source[0x0000], sizeof(byte) * size);
 		}
 		BIOS() {
 			memory = new u8[0x80'000];
@@ -237,7 +237,9 @@ word Memory::fetchWord(word address) {
 }
 
 word Memory::fetchOpcode(word address) {
-	return mRam.readWordWithoutLog(address);
+	address &= 0xffff'fffc;
+	Mem* region = getMemoryRegion(address);
+	return region->readWordWithoutLog(address);
 }
 
 
