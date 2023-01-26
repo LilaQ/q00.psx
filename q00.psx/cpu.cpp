@@ -13,8 +13,10 @@
 #define SECONDARY_OPCODE(opcode) opcode & 0x3f
 #define COP_COMMAND(opcode) opcode & 0x4000'0000
 
+using namespace R3000A;
 namespace CPU {
 	Registers registers;
+	COP cop[4];
 }
 static auto console = spdlog::stdout_color_mt("CPU");
 
@@ -49,6 +51,25 @@ void Opcode_J(u32 target) {
 	word tAddr = (CPU::registers.next_pc & 0xf000'0000) | (target << 2);
 	CPU::registers.next_pc = tAddr;
 	console->debug("J {0:08x} [{1:08x}]", target, tAddr);
+}
+
+void Opcode_JR(byte rs) {
+	u32 target = CPU::registers.r[rs];
+	if ((target & 0b11) == 0) {
+		CPU::registers.next_pc = target;
+	}
+	else {
+		//	TODO:	Address Error Exception
+		exit(1);
+	}
+	console->debug("JR {0:s} [{1:08x}]", REG(rs), target);
+}
+
+void Opcode_JAL(u32 target) {
+	word tAddr = (CPU::registers.next_pc & 0xf000'0000) | (target << 2);
+	CPU::registers.r[registers.ra] = CPU::registers.next_pc;
+	CPU::registers.next_pc = tAddr;
+	console->debug("JAL {0:08x} [{1:08x}]", target, tAddr);
 }
 
 void Opcode_BEQ(byte rs, byte rt, i16 offset) {
@@ -315,12 +336,28 @@ void Opcode_SRLV(byte rd, byte rt, byte rs) {
 	CPU::registers.r[rd] = CPU::registers.r[rt] >> (CPU::registers.r[rs] & 0x1f);
 }
 
+void Opcode_SLTU(byte rd, byte rs, byte rt) {
+	console->debug("SRLV {0:s}, {1:s}, ${2:s}", REG(rd), REG(rt), REG(rs));
+	CPU::registers.r[rd] = (CPU::registers.r[rt] > CPU::registers.r[rs]) ? 1 : 0;
+}
+
+
+//	COP Opcodes
+void COP_Opcode_MTC(byte rt, byte rd, byte cop) {
+	console->debug("MTC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
+	CPU::cop[cop].r[rd] = CPU::registers.r[rt];
+}
+
+void COP_Opcode_MFC(byte rt, byte rd, byte cop) {
+	console->debug("MFC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
+	CPU::registers.r[rt] = CPU::cop[cop].r[rd];
+}
 
 
 void CPU::step() {
 
 	CPU::registers.log_pc = CPU::registers.pc;
-	word opcode = Memory::fetchOpcode(CPU::registers.pc);
+	const word opcode = Memory::fetchWord(CPU::registers.pc);
 	console->debug("Processing opcode {0:08x}", opcode);
 
 	//	branch delay slot
@@ -328,42 +365,52 @@ void CPU::step() {
 	CPU::registers.next_pc += 4;
 
 	//	decode the opcode
-	u8 rs = (opcode >> 21) & 0x1f;	//	base
-	u8 rt = (opcode >> 16) & 0x1f;
-	u8 rd = (opcode >> 11) & 0x1f;
-	u8 imm5 = (opcode >> 6) & 0x1f;
-	u32 imm26 = opcode & 0x3ff'ffff;
-	i16 imm16 = opcode & 0xffff;	//	offset
+	const u8 rs = (opcode >> 21) & 0x1f;	//	base
+	const u8 rt = (opcode >> 16) & 0x1f;
+	const u8 rd = (opcode >> 11) & 0x1f;
+	const u8 imm5 = (opcode >> 6) & 0x1f;
+	const u32 imm26 = opcode & 0x3ff'ffff;
+	const i16 imm16 = opcode & 0xffff;		//	offset
 
 	//	COP
 	if (COP_COMMAND(opcode)) {
-		switch (opcode) {
-		case 0x10:
-		case 0x11:
-		case 0x12:
-		case 0x13:
-			u8 COP_ID = (PRIMARY_OPCODE(opcode) >> 26) & 0xff;
+		const u8 top6 = PRIMARY_OPCODE(opcode) >> 26;
+		const u8 top3 = top6 >> 3;
+		const u8 COP_ID = top6 & 0xff;
+
+		if (!imm5) {
 			switch (rs) {
-			case 0x0: console->debug("MFCn {0:x}", COP_ID); exit(1); break;
-			case 0x2: console->debug("CFCn {0:x}", COP_ID); exit(1); break;
-			case 0x4: console->debug("MTCn {0:x}", COP_ID); exit(1); break;
-			case 0x6: console->debug("CTCn {0:x}", COP_ID); exit(1); break;
-			case 0x8:
-				switch (rt) {
-				case 0x00: console->debug("BCnF {0:x}", COP_ID); exit(1); break;
-				case 0x01: console->debug("BCnF {0:x}", COP_ID); exit(1); break;
-				}
-				break;
-			case 0x10000:
-				switch (SECONDARY_OPCODE(opcode)) {
-				case 0x01: console->debug("COP0 TLBR (illegal)"); exit(1); break;
-				case 0x02: console->debug("COP0 TLBWI (illegal)"); exit(1); break;
-				case 0x06: console->debug("COP0 TLBWR (illegal)"); exit(1); break;
-				case 0x08: console->debug("COP0 TLBP (illegal)"); exit(1); break;
-				case 0x10: console->debug("COP0 RFE"); exit(1); break;
-				}
+				case 0x0: COP_Opcode_MFC(rt, rd, COP_ID); break;
+				case 0x2: console->debug("CFCn {0:x}", COP_ID); exit(1); break;
+				case 0x4: COP_Opcode_MTC(rt, rd, COP_ID); break;
+				case 0x6: console->debug("CTCn {0:x}", COP_ID); exit(1); break;
+				case 0x8:
+					switch (rt) {
+						case 0x00: console->debug("BCnF {0:x}", COP_ID); exit(1); break;
+						case 0x01: console->debug("BCnT {0:x}", COP_ID); exit(1); break;
+					}
+					break;
 			}
 		}
+		else {
+			switch (top3) {
+				case 0x2:
+					switch (SECONDARY_OPCODE(opcode)) {
+					case 0x01: console->debug("COP0 TLBR (illegal)"); exit(1); break;
+					case 0x02: console->debug("COP0 TLBWI (illegal)"); exit(1); break;
+					case 0x06: console->debug("COP0 TLBWR (illegal)"); exit(1); break;
+					case 0x08: console->debug("COP0 TLBP (illegal)"); exit(1); break;
+					case 0x10: console->debug("COP0 RFE"); exit(1); break;
+					}
+					break;
+				case 0x6:
+					console->debug("LWCn RFE {0:x}", COP_ID); exit(1); break;
+					break;
+				case 0x7:
+					console->debug("SWCn RFE {0:x}", COP_ID); exit(1); break;
+					break;
+			}
+		} 
 	}
 	//	CPU
 	else {
@@ -379,9 +426,7 @@ void CPU::step() {
 			case 0x04: Opcode_SLLV(rd, rt, rs); break;
 			case 0x06: Opcode_SRLV(rd, rt, rs);  break;
 			case 0x07: Opcode_SRAV(rd, rt, rs); break;
-
-				//	JR
-			case 0x08:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			case 0x08: Opcode_JR(rs); break;
 
 				//	JALR
 			case 0x09:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
@@ -413,7 +458,7 @@ void CPU::step() {
 			case 0x2a:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
 				//	SLTU
-			case 0x2b:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			case 0x2b: Opcode_SLTU(rd, rs, rt); break;
 
 			}
 			break;
@@ -422,12 +467,8 @@ void CPU::step() {
 				 //	BcondZ
 		case 0x01:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
-			//	J
 		case 0x02: Opcode_J(imm26); break;
-
-			//	JAL
-		case 0x03:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
+		case 0x03: Opcode_JAL(imm26); break;
 		case 0x04: Opcode_BEQ(rs, rt, imm16); break;
 		case 0x05: Opcode_BNE(rs, rt, imm16); break;
 
@@ -460,33 +501,6 @@ void CPU::step() {
 		case 0x2a: Opcode_SWL(rt, imm16, rs); break;
 		case 0x2b: Opcode_SW(rs, rt, imm16); break;
 		case 0x2e: Opcode_SWR(rt, imm16, rs); break;
-
-			//	LWC0
-		case 0x30:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-			//	LWC1
-		case 0x31:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-			//	LWC2
-		case 0x32:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-			//	LWC3
-		case 0x33:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode));
-			//exit(1);  
-			break;
-
-			//	SWC0
-		case 0x38:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-			//	SWC1
-		case 0x39:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-			//	SWC2
-		case 0x3a:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-			//	SWC3
-		case 0x3b:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
 		}
 	}
 }

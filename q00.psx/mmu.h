@@ -8,7 +8,6 @@ namespace Memory {
 	void init();
 	
 	byte fetchByte(word address);
-	word fetchOpcode(word address);
 	hword fetchHalfword(word address);
 	word fetchWord(word address);
 

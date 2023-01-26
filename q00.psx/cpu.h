@@ -21,7 +21,12 @@ namespace R3000A {
 		u32 lo = 0x00;
 	};
 
+	struct COP {
+		u32 r[32] = { 0x00 };
+	};
+
 	extern Registers registers;
+	extern COP cop[4];
 
 	void init();
 	void step();

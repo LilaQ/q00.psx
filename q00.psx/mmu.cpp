@@ -236,13 +236,6 @@ word Memory::fetchWord(word address) {
 	return region->readWord(address);
 }
 
-word Memory::fetchOpcode(word address) {
-	address &= 0xffff'fffc;
-	Mem* region = getMemoryRegion(address);
-	return region->readWordWithoutLog(address);
-}
-
-
 
 void Memory::storeByte(word address, byte data) {
 	Mem* region = getMemoryRegion(address);
