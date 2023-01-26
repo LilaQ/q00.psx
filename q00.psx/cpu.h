@@ -6,6 +6,32 @@
 
 namespace R3000A {
 
+	namespace COP {
+		struct COP {
+			u32 r[32] = { 0x00 };
+
+			//	status reg
+			union {
+				struct {
+					u8 interrupt_enable : 1;
+					u8 mode : 1;
+					u8 prev_interrupt_disable : 1;
+					u8 prev_mode : 1;
+					u8 old_interrupt_disable : 1;
+					u8 old_mode : 1;
+					u8 unused_0 : 2;
+					u8 interrupt_mask : 8;
+					u8 isolate_cache : 1;
+				} flags;
+				u32 raw;
+			} sr;
+		};
+
+		extern COP cop[];
+
+		void writeReg(u8 cop_id, u8 reg_id, u32 data);
+	}
+
 	struct Registers {
 		u32 r[32] = { 0x00 };
 
@@ -21,12 +47,7 @@ namespace R3000A {
 		u32 lo = 0x00;
 	};
 
-	struct COP {
-		u32 r[32] = { 0x00 };
-	};
-
 	extern Registers registers;
-	extern COP cop[4];
 
 	void init();
 	void step();

@@ -14,11 +14,37 @@
 #define COP_COMMAND(opcode) opcode & 0x4000'0000
 
 using namespace R3000A;
+static auto console = spdlog::stdout_color_mt("CPU");
+
 namespace CPU {
 	Registers registers;
-	COP cop[4];
+	namespace COP {
+		COP cop[4];
+
+		void writeReg(u8 cop_id, u8 reg_id, u32 data) {
+			switch (cop_id) {
+			case 0:
+				switch (reg_id) {
+				case 0xc:
+					cop[0].sr.raw = data;
+					break;
+				default:
+					cop[0].r[reg_id] = data;
+					break;
+				}
+				break;
+			case 2:
+				console->error("Unimplemented COP register write. COP: {0:x}, reg: {1:x} ", cop_id, reg_id);
+				exit(1);
+				break;
+			default:
+				console->error("Write to invalid COP register. COP: {0:x}, reg: {1:x} ", cop_id, reg_id);
+				exit(1);
+				break;
+			}
+		}
+	}
 }
-static auto console = spdlog::stdout_color_mt("CPU");
 
 void CPU::init() { 
 	console->info("Init CPU");
@@ -345,12 +371,12 @@ void Opcode_SLTU(byte rd, byte rs, byte rt) {
 //	COP Opcodes
 void COP_Opcode_MTC(byte rt, byte rd, byte cop) {
 	console->debug("MTC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
-	CPU::cop[cop].r[rd] = CPU::registers.r[rt];
+	CPU::COP::writeReg(cop, rd, CPU::registers.r[rt]);
 }
 
 void COP_Opcode_MFC(byte rt, byte rd, byte cop) {
 	console->debug("MFC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
-	CPU::registers.r[rt] = CPU::cop[cop].r[rd];
+	CPU::COP::writeReg(cop, rt, CPU::registers.r[rd]);
 }
 
 

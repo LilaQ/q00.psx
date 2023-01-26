@@ -2,12 +2,14 @@
 #include "defs.h"
 #include "mmu.h"
 #include "gpu.h"
+#include "cpu.h"
 #include <iostream>
 #include "include/spdlog/spdlog.h"
 #include "include/spdlog/sinks/stdout_color_sinks.h"
 #define MASKED_ADDRESS(a) (a & 0x1fff'ffff)
 #define MEMORY_REGION(a) (a & 0xf'ffff)
 #define LOCALIZED_ADDRESS(a) MASKED_ADDRESS((a & addressMask))
+#define CPU R3000A
 
 static auto console = spdlog::stdout_color_mt("Memory");
 
@@ -237,22 +239,31 @@ word Memory::fetchWord(word address) {
 }
 
 
+
 void Memory::storeByte(word address, byte data) {
-	Mem* region = getMemoryRegion(address);
-	region->storeByte(address, data);
+	if (!CPU::COP::cop[0].sr.flags.isolate_cache) {
+		Mem* region = getMemoryRegion(address);
+		region->storeByte(address, data);
+	}
 }
 
 void Memory::storeHalfword(word address, hword data) {
-	address &= 0xffff'fffe;
-	Mem* region = getMemoryRegion(address);
-	region->storeHalfword(address, data);
+	if (!CPU::COP::cop[0].sr.flags.isolate_cache) {
+		address &= 0xffff'fffe;
+		Mem* region = getMemoryRegion(address);
+		region->storeHalfword(address, data);
+	}
 }
 
 void Memory::storeWord(word address, word data) {
-	address &= 0xffff'fffc;
-	Mem* region = getMemoryRegion(address);
-	region->storeWord(address, data);
+	if (!CPU::COP::cop[0].sr.flags.isolate_cache) {
+		address &= 0xffff'fffc;
+		Mem* region = getMemoryRegion(address);
+		region->storeWord(address, data);
+	}
 }
+
+
 
 void Memory::loadToRAM(word targetAddress, byte* source, word offset, word size) {
 	mRam.load(targetAddress, source, offset, size);
