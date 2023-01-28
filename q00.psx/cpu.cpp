@@ -98,12 +98,26 @@ void Opcode_JAL(u32 target) {
 	console->debug("JAL {0:08x} [{1:08x}]", target, tAddr);
 }
 
+void Opcode_JALR(byte rd, byte rs) {
+	CPU::registers.r[rd] = CPU::registers.next_pc;
+	CPU::registers.next_pc = CPU::registers.r[rs];
+	console->debug("JAL {0:s}, {1:s} [{1:08x}]", REG(rd), REG(rs), CPU::registers.r[rs]);
+}
+
 void Opcode_BEQ(byte rs, byte rt, i16 offset) {
 	word tAddr = CPU::registers.pc + (SIGN_EXT32(offset) << 2);
 	if (CPU::registers.r[rs] == CPU::registers.r[rt]) {
 		CPU::registers.next_pc = tAddr;
 	}
 	console->debug("BEQ {0:s}, {1:s}, ${2:04x} [rs: {3:04x}, rt: {4:04x}]", REG(rs), REG(rt), tAddr, rs, rt);
+}
+
+void Opcode_BLEZ(byte rs, i16 offset) {
+	word tAddr = CPU::registers.pc + (SIGN_EXT32(offset) << 2);
+	if (CPU::registers.r[rs] <= 0) {
+		CPU::registers.next_pc = tAddr;
+	}
+	console->debug("BLEZ {0:s}, ${1:04x} [{2:04x}]", REG(rs), offset, tAddr);
 }
 
 void Opcode_BNE(byte rs, byte rt, i16 offset) {
@@ -120,6 +134,49 @@ void Opcode_BGTZ(byte rs, i16 offset) {
 		CPU::registers.next_pc = tAddr;
 	}
 	console->debug("BGTZ {0:s}, ${1:04x} [rs: {2:04x}]", REG(rs), tAddr, rs);
+}
+
+void Opcode_BcondZ(byte branchType, byte rs, i16 offset) {
+	switch (branchType) {
+		//	BLTZ
+		case 0x00: {
+			word tAddr = CPU::registers.pc + (SIGN_EXT32(offset) << 2);
+			if ((i32)CPU::registers.r[rs] < 0) {
+				CPU::registers.next_pc = tAddr;
+			}
+			console->debug("BLTZ {0:s}, ${1:04x} [rs: {2:04x}]", REG(rs), offset, tAddr);
+			break;
+		}
+		//	BGEZ
+		case 0x01: {
+			word tAddr = CPU::registers.pc + (SIGN_EXT32(offset) << 2);
+			if ((i32)CPU::registers.r[rs] >= 0) {
+				CPU::registers.next_pc = tAddr;
+			}
+			console->debug("BGEZ {0:s}, ${1:04x} [rs: {2:04x}]", REG(rs), offset, tAddr);
+			break;
+		}
+		//	BLTZAL
+		case 0x10: {
+			word tAddr = CPU::registers.pc + (SIGN_EXT32(offset) << 2);
+			CPU::registers.r[registers.ra] = CPU::registers.next_pc;
+			if ((i32)CPU::registers.r[rs] < 0) {
+				CPU::registers.next_pc = tAddr;
+			}
+			console->debug("BLTZAL {0:s}, ${1:04x} [rs: {2:04x}]", REG(rs), offset, tAddr);
+			break;
+		}
+		//	BGEZAL
+		case 0x11: {
+			word tAddr = CPU::registers.pc + (SIGN_EXT32(offset) << 2);
+			CPU::registers.r[registers.ra] = CPU::registers.next_pc;
+			if ((i32)CPU::registers.r[rs] >= 0) {
+				CPU::registers.next_pc = tAddr;
+			}
+			console->debug("BGEZAL {0:s}, ${1:04x} [rs: {2:04x}]", REG(rs), offset, tAddr);
+			break;
+		}
+	}
 }
 
 void Opcode_LUI(byte rt, u16 imm) {
@@ -362,9 +419,28 @@ void Opcode_SRLV(byte rd, byte rt, byte rs) {
 	CPU::registers.r[rd] = CPU::registers.r[rt] >> (CPU::registers.r[rs] & 0x1f);
 }
 
+void Opcode_SLT(byte rd, byte rs, byte rt) {
+	console->debug("SLT {0:s}, {1:s}, ${2:s}", REG(rd), REG(rt), REG(rs));
+	CPU::registers.r[rd] = ((i32)CPU::registers.r[rt] > (i32)CPU::registers.r[rs]) ? 1 : 0;
+}
+
 void Opcode_SLTU(byte rd, byte rs, byte rt) {
-	console->debug("SRLV {0:s}, {1:s}, ${2:s}", REG(rd), REG(rt), REG(rs));
+	console->debug("SLTU {0:s}, {1:s}, ${2:s}", REG(rd), REG(rt), REG(rs));
 	CPU::registers.r[rd] = (CPU::registers.r[rt] > CPU::registers.r[rs]) ? 1 : 0;
+}
+
+void Opcode_SLTI(byte rt, byte rs, i16 imm) {
+	console->debug("SLTI {0:s}, {1:s}, ${2:04x}", REG(rt), REG(rs), imm);
+	CPU::registers.r[rt] = ((i32)CPU::registers.r[rs] < SIGN_EXT16_TO_32(imm)) ? 1 : 0;
+}
+
+void Opcode_SLTIU(byte rt, byte rs, i16 imm) {
+	console->debug("SLTIU {0:s}, {1:s}, ${2:04x}", REG(rt), REG(rs), imm);
+	CPU::registers.r[rt] = (CPU::registers.r[rs] < (u32)SIGN_EXT16_TO_32(imm)) ? 1 : 0;
+}
+
+void Opcode_SYSCALL() {
+	console->debug("SYSCALL");
 }
 
 
@@ -453,12 +529,8 @@ void CPU::step() {
 			case 0x06: Opcode_SRLV(rd, rt, rs);  break;
 			case 0x07: Opcode_SRAV(rd, rt, rs); break;
 			case 0x08: Opcode_JR(rs); break;
-
-				//	JALR
-			case 0x09:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-				//	SYSCALL
-			case 0x0c:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			case 0x09: Opcode_JALR(rd, rs); break;
+			case 0x0c: Opcode_SYSCALL(); break;
 
 				//	BREAK
 			case 0x0d:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
@@ -479,38 +551,22 @@ void CPU::step() {
 			case 0x25: Opcode_OR(rd, rs, rt); break;
 			case 0x26: Opcode_XOR(rd, rs, rt); break;
 			case 0x27: Opcode_NOR(rd, rs, rt); break;
-
-				//	SLT
-			case 0x2a:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-				//	SLTU
+			case 0x2a: Opcode_SLT(rd, rs, rt); break;
 			case 0x2b: Opcode_SLTU(rd, rs, rt); break;
-
 			}
 			break;
 		}
-
-				 //	BcondZ
-		case 0x01:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
+		case 0x01: Opcode_BcondZ(rt, rs, imm16); break;
 		case 0x02: Opcode_J(imm26); break;
 		case 0x03: Opcode_JAL(imm26); break;
 		case 0x04: Opcode_BEQ(rs, rt, imm16); break;
 		case 0x05: Opcode_BNE(rs, rt, imm16); break;
-
-			//	BLEZ
-		case 0x06:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
+		case 0x06: Opcode_BLEZ(rs, imm16); break;
 		case 0x07: Opcode_BGTZ(rs, imm16); break;
 		case 0x08: Opcode_ADDI(rt, rs, imm16); break;
 		case 0x09: Opcode_ADDIU(rt, rs, imm16); break;
-
-			//	SLTI
-		case 0x0a:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
-			//	SLTIU
-		case 0x0b:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
-
+		case 0x0a: Opcode_SLTI(rt, rs, imm16); break;
+		case 0x0b: Opcode_SLTIU(rt, rs, imm16); break;
 		case 0x0c: Opcode_ANDI(rt, rs, imm16); break;
 		case 0x0d: Opcode_ORI(rt, rs, imm16); break;
 		case 0x0e: Opcode_XORI(rt, rs, imm16); break;

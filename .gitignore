@@ -362,3 +362,4 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /q00.psx/scph1001.bin
+/q00.psx/ramDump.txt

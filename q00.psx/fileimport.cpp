@@ -66,6 +66,19 @@ void FileImport::loadBIOS(const char filename[]) {
 	R3000A::registers.next_pc = 0xbfc0'0004;
 }
 
+void FileImport::saveFile(const char filename[], u8* data, u32 dataSize) {
+	ofstream fout(filename);
+	if (fout.is_open()) {
+		for (int i = 0; i < dataSize; i++) {
+			fout << data[i];
+		}
+		cout << "Success!" << endl;
+	}
+	else {
+		cout << "File could not be opened." << endl;
+	}
+}
+
 FileImport::PSX_FILE FileImport::loadFile(const char filename[]) {
 	streampos size;
 	byte* fileInMemory = new byte;

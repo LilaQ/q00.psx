@@ -25,6 +25,7 @@ namespace R3000A {
 				} flags;
 				u32 raw;
 			} sr;
+			static_assert(sizeof(sr) == sizeof(u32), "Union not at the expected size!");
 		};
 
 		extern COP cop[];

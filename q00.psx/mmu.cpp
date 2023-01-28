@@ -3,6 +3,7 @@
 #include "mmu.h"
 #include "gpu.h"
 #include "cpu.h"
+#include "fileimport.h"
 #include <iostream>
 #include "include/spdlog/spdlog.h"
 #include "include/spdlog/sinks/stdout_color_sinks.h"
@@ -27,10 +28,11 @@ static auto console = spdlog::stdout_color_mt("Memory");
 
 class Mem {
 	protected:
-		u8* memory;
+		
 		word addressMask;
 		std::shared_ptr<spdlog::logger> memConsole;
 	public:
+		u8* memory;
 		//	log
 		virtual void readByteLog(word address) {
 			memConsole->debug("Reading from 0x{0:x}", address);
@@ -273,4 +275,8 @@ void Memory::loadToRAM(word targetAddress, byte* source, word offset, word size)
 void Memory::loadBIOS(byte* source, word size) {
 	mBios.load(source, size);
 	console->info("Done loading BIOS");
+}
+
+void Memory::dumpRAM() {
+	FileImport::saveFile("ramDump.txt", mRam.memory, 0x200'000);
 }

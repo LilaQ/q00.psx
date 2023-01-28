@@ -13,7 +13,7 @@ namespace FileImport {
 	void loadEXE(const char[]);
 	void loadBIOS(const char[]);
 	PSX_FILE loadFile(const char[]);
-
+	void saveFile(const char filename[], u8* data, u32 dataSize);
 }
 
 #endif

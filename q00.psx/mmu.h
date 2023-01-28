@@ -17,6 +17,8 @@ namespace Memory {
 
 	void loadToRAM(word, byte*, word, word);
 	void loadBIOS(byte* source, word size);
+	void dumpRAM();
+
 }
 
 #endif
