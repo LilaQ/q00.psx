@@ -6,32 +6,71 @@
 
 namespace R3000A {
 
-	namespace COP {
-		struct COP {
-			u32 r[32] = { 0x00 };
+	struct COP {
+		u32 r[32] = { 0x00 };
 
-			//	status reg
-			union {
-				struct {
-					u8 interrupt_enable : 1;
-					u8 mode : 1;
-					u8 prev_interrupt_disable : 1;
-					u8 prev_mode : 1;
-					u8 old_interrupt_disable : 1;
-					u8 old_mode : 1;
-					u8 unused_0 : 2;
-					u8 interrupt_mask : 8;
-					u8 isolate_cache : 1;
-				} flags;
-				u32 raw;
-			} sr;
-			static_assert(sizeof(sr) == sizeof(u32), "Union not at the expected size!");
-		};
+		//	status reg
+		union {
+			struct {
+				u32 interrupt_enable : 1;
+				u32 mode : 1;
+				u32 prev_interrupt_disable : 1;
+				u32 prev_mode : 1;
+				u32 old_interrupt_disable : 1;
+				u32 old_mode : 1;
+				u32 : 2;
+				u32 interrupt_mask : 8;
+				u32 isolate_cache : 1;
+				u32 swapped_cache_mode : 1;
+				u32 parity_zero : 1;
+				u32 cm : 1;
+				u32 cache_parity_error : 1;
+				u32 tlb_shutdown : 1;
+				u32 boot_exception_vectors : 1;
+				u32 : 2;
+				u32 reverse_endianness : 1;
+				u32 : 2;
+				u32 cop0_enable : 1;
+				u32 cop1_enable : 1;
+				u32 cop2_enable : 1;
+				u32 cop3_enable : 1;
+			} flags;
+			u32 raw;
+		} sr;
+		static_assert(sizeof(sr) == sizeof(u32), "Union not at the expected size!");
 
-		extern COP cop[];
+		//	CAUSE reg (describes the most recent recognised exception)
+		union {
+			struct {
+				u32 : 2;
+				u32 excode : 5;
+				u32 : 1;
+				u32 interrupt_pending : 8;
+				u32 : 12;
+				u32 cop_id : 2;
+				u32 : 1;
+				u32 branch_delay : 1;
+			};
+			u32 raw;
+		} cause;
+		static_assert(sizeof(sr) == sizeof(u32), "Union not at the expected size!");
 
-		void writeReg(u8 cop_id, u8 reg_id, u32 data);
-	}
+		static const u8 cause_INT = 0x00;
+		static const u8 cause_AdEL = 0x04;
+		static const u8 cause_AdES = 0x05;
+		static const u8 cause_IBE = 0x06;
+		static const u8 cause_DBE = 0x07;
+		static const u8 cause_SYSCALL = 0x08;
+		static const u8 cause_BP = 0x09;
+		static const u8 cause_RI = 0x0a;
+		static const u8 cause_CpU = 0x0b;
+		static const u8 cause_Ovf = 0x0c;
+	};
+
+	extern COP cop[];
+
+	void writeReg(u8 cop_id, u8 reg_id, u32 data);
+	u32 readReg(u8 cop_id, u8 reg_id);
 
 	struct Registers {
 		u32 r[32] = { 0x00 };

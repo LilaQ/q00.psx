@@ -243,14 +243,14 @@ word Memory::fetchWord(word address) {
 
 
 void Memory::storeByte(word address, byte data) {
-	if (!CPU::COP::cop[0].sr.flags.isolate_cache) {
+	if (!CPU::cop[0].sr.flags.isolate_cache) {
 		Mem* region = getMemoryRegion(address);
 		region->storeByte(address, data);
 	}
 }
 
 void Memory::storeHalfword(word address, hword data) {
-	if (!CPU::COP::cop[0].sr.flags.isolate_cache) {
+	if (!CPU::cop[0].sr.flags.isolate_cache) {
 		address &= 0xffff'fffe;
 		Mem* region = getMemoryRegion(address);
 		region->storeHalfword(address, data);
@@ -258,7 +258,7 @@ void Memory::storeHalfword(word address, hword data) {
 }
 
 void Memory::storeWord(word address, word data) {
-	if (!CPU::COP::cop[0].sr.flags.isolate_cache) {
+	if (!CPU::cop[0].sr.flags.isolate_cache) {
 		address &= 0xffff'fffc;
 		Mem* region = getMemoryRegion(address);
 		region->storeWord(address, data);

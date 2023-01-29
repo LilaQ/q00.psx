@@ -12,36 +12,63 @@
 #define PRIMARY_OPCODE(opcode) opcode >> 26
 #define SECONDARY_OPCODE(opcode) opcode & 0x3f
 #define COP_COMMAND(opcode) opcode & 0x4000'0000
+#define SYSERROR_UNRESOLVED_EXCEPTION 0x0000'0040
+#define EXC_VEC_RESET_BEV0 0xbfc0'0000
+#define EXC_VEC_RESET_BEV1 0xbfc0'0000
+#define EXC_VEC_UTLBMISS_BEV0 0x8000'0000
+#define EXC_VEC_UTLBMISS_BEV1 0xbfc0'0100
+#define EXC_VEC_COP0BREAK_BEV0 0x8000'0040
+#define EXC_VEC_COP0BREAK_BEV1 0xbfc0'0140
+#define EXC_VEC_GENERAL_BEV0 0x8000'0080
+#define EXC_VEC_GENERAL_BEV1 0xbfc0'0180
 
 using namespace R3000A;
 static auto console = spdlog::stdout_color_mt("CPU");
 
 namespace CPU {
 	Registers registers;
-	namespace COP {
-		COP cop[4];
+	COP cop[4];
 
-		void writeReg(u8 cop_id, u8 reg_id, u32 data) {
-			switch (cop_id) {
-			case 0:
-				switch (reg_id) {
-				case 0xc:
-					cop[0].sr.raw = data;
-					break;
-				default:
-					cop[0].r[reg_id] = data;
-					break;
-				}
-				break;
-			case 2:
-				console->error("Unimplemented COP register write. COP: {0:x}, reg: {1:x} ", cop_id, reg_id);
-				exit(1);
+	void writeReg(u8 cop_id, u8 reg_id, u32 data) {
+		switch (cop_id) {
+		case 0:
+			switch (reg_id) {
+			case 0xc:
+				cop[0].sr.raw = data;
 				break;
 			default:
-				console->error("Write to invalid COP register. COP: {0:x}, reg: {1:x} ", cop_id, reg_id);
-				exit(1);
+				cop[0].r[reg_id] = data;
 				break;
 			}
+			break;
+		case 2:
+			console->error("Unimplemented COP register write. COP: {0:x}, reg: {1:x} ", cop_id, reg_id);
+			exit(1);
+			break;
+		default:
+			console->error("Write to invalid COP register. COP: {0:x}, reg: {1:x} ", cop_id, reg_id);
+			exit(1);
+			break;
+		}
+	}
+
+	u32 readReg(u8 cop_id, u8 reg_id) {
+		switch (cop_id) {
+			case 0:
+				switch (reg_id) {
+					case 12:
+						return cop[0].sr.raw;
+						break;
+					case 13:
+						return cop[0].cause.raw;
+						break;
+					default:
+						return cop[0].r[reg_id];
+						break;
+				}
+			default:
+				console->error("Unimplemented COP {0:x} reg {1:x} access", cop_id, reg_id);
+				break;
 		}
 	}
 }
@@ -439,20 +466,25 @@ void Opcode_SLTIU(byte rt, byte rs, i16 imm) {
 	CPU::registers.r[rt] = (CPU::registers.r[rs] < (u32)SIGN_EXT16_TO_32(imm)) ? 1 : 0;
 }
 
-void Opcode_SYSCALL() {
-	console->debug("SYSCALL");
-}
 
 
 //	COP Opcodes
 void COP_Opcode_MTC(byte rt, byte rd, byte cop) {
 	console->debug("MTC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
-	CPU::COP::writeReg(cop, rd, CPU::registers.r[rt]);
+	CPU::writeReg(cop, rd, CPU::registers.r[rt]);
 }
 
 void COP_Opcode_MFC(byte rt, byte rd, byte cop) {
 	console->debug("MFC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
-	CPU::COP::writeReg(cop, rt, CPU::registers.r[rd]);
+	CPU::writeReg(cop, rt, CPU::registers.r[rd]);
+}
+
+void Opcode_SYSCALL() {
+	spdlog::set_level(spdlog::level::debug);
+	CPU::registers.pc = (CPU::cop[0].sr.flags.boot_exception_vectors) ? EXC_VEC_GENERAL_BEV1 : EXC_VEC_GENERAL_BEV0;
+	CPU::registers.next_pc = CPU::registers.pc + 4;
+	CPU::cop[0].cause.excode = CPU::COP::cause_SYSCALL;
+	console->info("SYSCALL");
 }
 
 
@@ -461,6 +493,11 @@ void CPU::step() {
 	CPU::registers.log_pc = CPU::registers.pc;
 	const word opcode = Memory::fetchWord(CPU::registers.pc);
 	console->debug("Processing opcode {0:08x}", opcode);
+	if (CPU::registers.pc == 0xa0 && CPU::registers.r[9] == 0x40) {
+		console->error("Something Mike'd, you better backtrace.");
+		Memory::dumpRAM();
+		exit(1);
+	}
 
 	//	branch delay slot
 	CPU::registers.pc = CPU::registers.next_pc;
