@@ -69,8 +69,8 @@ namespace R3000A {
 
 	extern COP cop[];
 
-	void writeReg(u8 cop_id, u8 reg_id, u32 data);
-	u32 readReg(u8 cop_id, u8 reg_id);
+	void writeCOPReg(u8 cop_id, u8 reg_id, u32 data);
+	u32 readCOPReg(u8 cop_id, u8 reg_id);
 
 	struct Registers {
 		u32 r[32] = { 0x00 };

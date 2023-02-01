@@ -29,7 +29,7 @@ namespace CPU {
 	Registers registers;
 	COP cop[4];
 
-	void writeReg(u8 cop_id, u8 reg_id, u32 data) {
+	void writeCOPReg(u8 cop_id, u8 reg_id, u32 data) {
 		switch (cop_id) {
 		case 0:
 			switch (reg_id) {
@@ -52,7 +52,7 @@ namespace CPU {
 		}
 	}
 
-	u32 readReg(u8 cop_id, u8 reg_id) {
+	u32 readCOPReg(u8 cop_id, u8 reg_id) {
 		switch (cop_id) {
 			case 0:
 				switch (reg_id) {
@@ -74,7 +74,7 @@ namespace CPU {
 }
 
 void CPU::init() { 
-	console->info("Init CPU");
+	console->info("CPU init");
 	auto formatter = std::make_unique<spdlog::pattern_formatter>();
 	formatter->add_flag<CPU_PC_flag_formatter>('*').set_pattern("[%T:%e] [%n] [%*] [%^%l%$] %v");
 	console->set_formatter(std::move(formatter));
@@ -471,16 +471,16 @@ void Opcode_SLTIU(byte rt, byte rs, i16 imm) {
 //	COP Opcodes
 void COP_Opcode_MTC(byte rt, byte rd, byte cop) {
 	console->debug("MTC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
-	CPU::writeReg(cop, rd, CPU::registers.r[rt]);
+	CPU::writeCOPReg(cop, rd, CPU::registers.r[rt]);
 }
 
 void COP_Opcode_MFC(byte rt, byte rd, byte cop) {
 	console->debug("MFC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
-	CPU::writeReg(cop, rt, CPU::registers.r[rd]);
+	CPU::registers.r[rt] = CPU::readCOPReg(cop, rd);
 }
 
 void Opcode_SYSCALL() {
-	spdlog::set_level(spdlog::level::debug);
+	//spdlog::set_level(spdlog::level::debug);
 	CPU::registers.pc = (CPU::cop[0].sr.flags.boot_exception_vectors) ? EXC_VEC_GENERAL_BEV1 : EXC_VEC_GENERAL_BEV0;
 	CPU::registers.next_pc = CPU::registers.pc + 4;
 	CPU::cop[0].cause.excode = CPU::COP::cause_SYSCALL;
@@ -493,11 +493,6 @@ void CPU::step() {
 	CPU::registers.log_pc = CPU::registers.pc;
 	const word opcode = Memory::fetchWord(CPU::registers.pc);
 	console->debug("Processing opcode {0:08x}", opcode);
-	if (CPU::registers.pc == 0xa0 && CPU::registers.r[9] == 0x40) {
-		console->error("Something Mike'd, you better backtrace.");
-		Memory::dumpRAM();
-		exit(1);
-	}
 
 	//	branch delay slot
 	CPU::registers.pc = CPU::registers.next_pc;
@@ -570,7 +565,8 @@ void CPU::step() {
 			case 0x0c: Opcode_SYSCALL(); break;
 
 				//	BREAK
-			case 0x0d:console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
+			case 0x0d:
+				console->error("Unimplemented primary opcode 0x{0:02x}, secondary opcode {1:02x}", PRIMARY_OPCODE(opcode), SECONDARY_OPCODE(opcode)); exit(1);  break;
 
 			case 0x10: Opcode_MFHI(rd); break;
 			case 0x11: Opcode_MTHI(rs); break;
@@ -620,6 +616,9 @@ void CPU::step() {
 		case 0x2a: Opcode_SWL(rt, imm16, rs); break;
 		case 0x2b: Opcode_SW(rs, rt, imm16); break;
 		case 0x2e: Opcode_SWR(rt, imm16, rs); break;
+		default:
+			console->error("Unimplemented opcode : {0:x}", opcode);
+			exit(1);
 		}
 	}
 }

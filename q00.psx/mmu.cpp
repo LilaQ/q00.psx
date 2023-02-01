@@ -99,6 +99,16 @@ class RAM : public Mem {			//	2048k (first 64k reserved for BIOS) - RAM
 			addressMask = 0x1f'ffff;
 			memConsole = spdlog::stdout_color_mt("RAM");
 		}
+
+		word readWord(word address) {
+			address = LOCALIZED_ADDRESS(address);
+
+			if ((address == 0xa0 && R3000A::registers.r[9] == 0x3c) || 
+				(address == 0xb0 && R3000A::registers.r[9] == 0x3d))  {
+				printf("%c", R3000A::registers.r[4]);
+			}
+			return readWordWithoutLog(address);
+		}
 } mRam;
 
 class Exp1 : public Mem {			//	8192k - Expansion Region 1
@@ -202,7 +212,7 @@ class BIOS : public Mem {			//	512k - BIOS ROM
 } mBios;
 
 void Memory::init() { 
-	console->info("Memory Init");
+	console->info("Memory init");
 }
 
 constexpr Mem* getMemoryRegion(word address) {
