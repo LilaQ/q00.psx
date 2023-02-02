@@ -493,10 +493,10 @@ void COP_Opcode_MFC(byte rt, byte rd, byte cop) {
 }
 
 void COP_Opcode_SYSCALL() {
+	CPU::writeCOPReg(0, 14, CPU::registers.pc);
 	CPU::registers.pc = (CPU::cop[0].sr.flags.boot_exception_vectors) ? EXC_VEC_GENERAL_BEV1 : EXC_VEC_GENERAL_BEV0;
 	CPU::registers.next_pc = CPU::registers.pc + 4;
 	CPU::cop[0].cause.excode = CPU::COP::cause_SYSCALL;
-	CPU::writeCOPReg(0, 14, CPU::registers.pc);
 	console->info("SYSCALL");
 }
 
