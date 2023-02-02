@@ -26,6 +26,281 @@ static auto console = spdlog::stdout_color_mt("Memory");
 		FFFE0000h (in KSEG2)     0.5K   Internal CPU control registers (Cache Control)
 */
 
+static const char* A_FUNC_LUT[] = {
+	"open(filename,accessmode)",
+	"lseek(fd,offset,seektype)",
+	"read(fd,dst,length)",
+	"write(fd,src,length)",
+	"close(fd)",
+	"ioctl(fd,cmd,arg)",
+	"exit(exitcode)",
+	"isatty(fd)",
+	"getc(fd)",
+	"putc(char,fd)",
+	"todigit(char)",
+	"atof(src)     ;Does NOT work - uses (ABSENT) cop1 !!!",
+	"strtoul(src,src_end,base)",
+	"strtol(src,src_end,base)",
+	"abs(val)",
+	"labs(val)",
+	"atoi(src)",
+	"atol(src)",
+	"atob(src,num_dst)",
+	"setjmp(buf)",
+	"longjmp(buf,param)",
+	"strcat(dst,src)",
+	"strncat(dst,src,maxlen)",
+	"strcmp(str1,str2)",
+	"strncmp(str1,str2,maxlen)",
+	"strcpy(dst,src)",
+	"strncpy(dst,src,maxlen)",
+	"strlen(src)",
+	"index(src,char)",
+	"rindex(src,char)",
+	"strchr(src,char)  ;exactly the same as 'index'",
+	"strrchr(src,char) ;exactly the same as 'rindex'",
+	"strpbrk(src,list)",
+	"strspn(src,list)",
+	"strcspn(src,list)",
+	"strtok(src,list)  ;use strtok(0,list) in further calls",
+	"strstr(str,substr)       ;Bugged",
+	"toupper(char)",
+	"tolower(char)",
+	"bcopy(src,dst,len)",
+	"bzero(dst,len)",
+	"bcmp(ptr1,ptr2,len)      ;Bugged",
+	"memcpy(dst,src,len)",
+	"memset(dst,fillbyte,len)",
+	"memmove(dst,src,len)     ;Bugged",
+	"memcmp(src1,src2,len)    ;Bugged",
+	"memchr(src,scanbyte,len)",
+	"rand()",
+	"srand(seed)",
+	"qsort(base,nel,width,callback)",
+	"strtod(src,src_end) ;Does NOT work - uses (ABSENT) cop1 !!!",
+	"malloc(size)",
+	"free(buf)",
+	"lsearch(key,base,nel,width,callback)",
+	"bsearch(key,base,nel,width,callback)",
+	"calloc(sizx,sizy)            ;SLOW!",
+	"realloc(old_buf,new_siz)     ;SLOW!",
+	"InitHeap(addr,size)",
+	"_exit(exitcode)",
+	"getchar()",
+	"putchar(char)",
+	"gets(dst)",
+	"puts(src)",
+	"printf(txt,param1,param2,etc.)",
+	"SystemErrorUnresolvedException()",
+	"LoadTest(filename,headerbuf)",
+	"Load(filename,headerbuf)",
+	"Exec(headerbuf,param1,param2)",
+	"FlushCache()",
+	"init_a0_b0_c0_vectors",
+	"GPU_dw(Xdst,Ydst,Xsiz,Ysiz,src)",
+	"gpu_send_dma(Xdst,Ydst,Xsiz,Ysiz,src)",
+	"SendGP1Command(gp1cmd)",
+	"GPU_cw(gp0cmd)   ;send GP0 command word",
+	"GPU_cwp(src,num) ;send GP0 command word and parameter words",
+	"send_gpu_linked_list(src)",
+	"gpu_abort_dma()",
+	"GetGPUStatus()",
+	"gpu_sync()",
+	"SystemError",
+	"SystemError",
+	"LoadExec(filename,stackbase,stackoffset)",
+	"GetSysSp",
+	"SystemError           ;PS2: set_ioabort_handler(src)",
+	"_96_init()",
+	"_bu_init()",
+	"_96_remove()  ;does NOT work due to SysDeqIntRP bug",
+	"return 0",
+	"return 0",
+	"return 0",
+	"return 0",
+	"dev_tty_init()                                      ;PS2: SystemError",
+	"dev_tty_open(fcb,and unused:'path/name',accessmode) ;PS2: SystemError",
+	"dev_tty_out(fcb,cmd)                             ;PS2: SystemError",
+	"dev_tty_ioctl(fcb,cmd,arg)                          ;PS2: SystemError",
+	"dev_cd_open(fcb,'path/name',accessmode)",
+	"dev_cd_read(fcb,dst,len)",
+	"dev_cd_close(fcb)",
+	"dev_cd_firstfile(fcb,'path/name',direntry)",
+	"dev_cd_nextfile(fcb,direntry)",
+	"dev_cd_chdir(fcb,'path')",
+	"dev_card_open(fcb,'path/name',accessmode)",
+	"dev_card_read(fcb,dst,len)",
+	"dev_card_write(fcb,src,len)",
+	"dev_card_close(fcb)",
+	"dev_card_firstfile(fcb,'path/name',direntry)",
+	"dev_card_nextfile(fcb,direntry)",
+	"dev_card_erase(fcb,'path/name')",
+	"dev_card_undelete(fcb,'path/name')",
+	"dev_card_format(fcb)",
+	"dev_card_rename(fcb1,'path/name1',fcb2,'path/name2')",
+	"?   ;card ;[r4+18h]=00000000h  ;card_clear_error(fcb) or so",
+	"_bu_init()",
+	"_96_init()",
+	"_96_remove()   ;does NOT work due to SysDeqIntRP bug",
+	"return 0",
+	"return 0",
+	"return 0",
+	"return 0",
+	"return 0",
+	"CdAsyncSeekL(src)",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"CdAsyncGetStatus(dst)",
+	"return 0               ;DTL-H: Unknown?",
+	"CdAsyncReadSector(count,dst,mode)",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"CdAsyncSetMode(mode)",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?, or reportedly, CdStop (?)",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"return 0               ;DTL-H: Unknown?",
+	"CdromIoIrqFunc1()",
+	"CdromDmaIrqFunc1()",
+	"CdromIoIrqFunc2()",
+	"CdromDmaIrqFunc2()",
+	"CdromGetInt5errCode(dst1,dst2)",
+	"CdInitSubFunc()",
+	"AddCDROMDevice()",
+	"AddMemCardDevice()     ;DTL-H: SystemError",
+	"AddDuartTtyDevice()    ;DTL-H: AddAdconsTtyDevice ;PS2: SystemError",
+	"add_nullcon_driver()",
+	"SystemError            ;DTL-H: AddMessageWindowDevice",
+	"SystemError            ;DTL-H: AddCdromSimDevice",
+	"SetConf(num_EvCB,num_TCB,stacktop)",
+	"GetConf(num_EvCB_dst,num_TCB_dst,stacktop_dst)",
+	"SetCdromIrqAutoAbort(type,flag)",
+	"SetMem(megabytes)",
+};
+
+static const char* B_FUNC_LUT[] = {
+	"alloc_kernel_memory(size)",
+	"free_kernel_memory(buf)",
+	"init_timer(t,reload,flags)",
+	"get_timer(t)",
+	"enable_timer_irq(t)",
+	"disable_timer_irq(t)",
+	"restart_timer(t)",
+	"DeliverEvent(class, spec)",
+	"OpenEvent(class,spec,mode,func)",
+	"CloseEvent(event)",
+	"WaitEvent(event)",
+	"TestEvent(event)",
+	"EnableEvent(event)",
+	"DisableEvent(event)",
+	"OpenTh(reg_PC,reg_SP_FP,reg_GP)",
+	"CloseTh(handle)",
+	"ChangeTh(handle)",
+	"jump_to_00000000h",
+	"InitPAD2(buf1,siz1,buf2,siz2)",
+	"StartPAD2()",
+	"StopPAD2()",
+	"PAD_init2(type,button_dest,unused,unused)",
+	"PAD_dr()",
+	"ReturnFromException()",
+	"ResetEntryInt()",
+	"HookEntryInt(addr)",
+	"SystemError  ;PS2: return 0",
+	"SystemError  ;PS2: return 0",
+	"SystemError  ;PS2: return 0",
+	"SystemError  ;PS2: return 0",
+	"SystemError  ;PS2: return 0",
+	"SystemError  ;PS2: return 0",
+	"UnDeliverEvent(class,spec)",
+	"SystemError  ;PS2: return 0",
+	"SystemError  ;PS2: return 0",
+	"SystemError  ;PS2: return 0",
+	"jump_to_00000000h",
+	"jump_to_00000000h",
+	"jump_to_00000000h",
+	"jump_to_00000000h",
+	"jump_to_00000000h",
+	"jump_to_00000000h",
+	"SystemError  ;PS2: return 0",
+	"SystemError  ;PS2: return 0",
+	"jump_to_00000000h",
+	"jump_to_00000000h",
+	"jump_to_00000000h",
+	"jump_to_00000000h",
+	"jump_to_00000000h",
+	"jump_to_00000000h",
+	"open(filename,accessmode)",
+	"lseek(fd,offset,seektype)",
+	"read(fd,dst,length)",
+	"write(fd,src,length)",
+	"close(fd)",
+	"ioctl(fd,cmd,arg)",
+	"exit(exitcode)",
+	"isatty(fd)",
+	"getc(fd)",
+	"putc(char,fd)",
+	"getchar()",
+	"putchar(char)",
+	"gets(dst)",
+	"puts(src)",
+	"cd(name)",
+	"format(devicename)",
+	"firstfile2(filename,direntry)",
+	"nextfile(direntry)",
+	"rename(old_filename,new_filename)",
+	"erase(filename)",
+	"undelete(filename)",
+	"AddDrv(device_info)  ;subfunction for AddXxxDevice functions",
+	"DelDrv(device_name_lowercase)",
+	"PrintInstalledDevices()"
+};
+
+static const char* C_FUNC_LUT[] = {
+	"EnqueueTimerAndVblankIrqs(priority)",
+	"EnqueueSyscallHandler(priority)",
+	"EnqueueTimerAndVblankIrqs(priority) ;used with prio=1",
+	"EnqueueSyscallHandler(priority)     ;used with prio=0",
+	"SysEnqIntRP(priority,struc)  ;bugged, use with care",
+	"SysDeqIntRP(priority,struc)  ;bugged, use with care",
+	"get_free_EvCB_slot()",
+	"get_free_TCB_slot()",
+	"ExceptionHandler()",
+	"InstallExceptionHandlers()  ;destroys/uses k0/k1",
+	"SysInitMemory(addr,size)",
+	"SysInitKernelVariables()",
+	"ChangeClearRCnt(t,flag)",
+	"SystemError  ;PS2: return 0",
+	"InitDefInt(priority) ;used with prio=3",
+	"SetIrqAutoAck(irq,flag)",
+	"return 0               ;DTL-H2000: dev_sio_init",
+	"return 0               ;DTL-H2000: dev_sio_open",
+	"return 0               ;DTL-H2000: dev_sio_out",
+	"return 0               ;DTL-H2000: dev_sio_ioctl",
+	"InstallDevices(ttyflag)",
+	"FlushStdInOutPut()",
+	"return 0               ;DTL-H2000: SystemError",
+	"_cdevinput(circ,char)",
+	"_cdevscan()",
+	"_circgetc(circ)    ;uses r5 as garbage txt for _ioabort",
+	"_circputc(char,circ)",
+	"_ioabort(txt1,txt2)",
+	"set_card_find_mode(mode)  ;0=normal, 1=find deleted files",
+	"KernelRedirect(ttyflag)   ;PS2: ttyflag=1 causes SystemError",
+	"AdjustA0Table()",
+	"get_card_find_mode()"
+};
+
 class Mem {
 	protected:
 		
@@ -102,11 +377,21 @@ class RAM : public Mem {			//	2048k (first 64k reserved for BIOS) - RAM
 
 		word readWord(word address) {
 			address = LOCALIZED_ADDRESS(address);
-
-			if ((address == 0xa0 && R3000A::registers.r[9] == 0x3c) || 
-				(address == 0xb0 && R3000A::registers.r[9] == 0x3d))  {
+			byte funcId = R3000A::registers.r[9];
+			if ((address == 0xa0 && funcId == 0x3c) || 
+				(address == 0xb0 && funcId == 0x3d))  {
 				printf("%c", R3000A::registers.r[4]);
 			}
+			else if (address == 0xa0) {
+				memConsole->info("A-Function ({0:x}) - {1:s}", funcId, A_FUNC_LUT[funcId]);
+			}
+			else if (address == 0xb0) {
+				memConsole->info("B-Function ({0:x}) - {1:s}", funcId, B_FUNC_LUT[funcId]);
+			}
+			else if (address == 0xc0) {
+				memConsole->info("C-Function ({0:x}) - {1:s}", funcId, C_FUNC_LUT[funcId]);
+			}
+
 			return readWordWithoutLog(address);
 		}
 } mRam;
@@ -130,6 +415,10 @@ class Scratchpad : public Mem {		//	1k - Scratchpad
 } mScratchpad;
 
 class IO : public Mem {				//	8k - I/O 
+
+	word I_STAT;
+	word I_MASK;
+
 	public:
 		IO() {
 			memory = new u8[0x2000];
@@ -148,16 +437,30 @@ class IO : public Mem {				//	8k - I/O
 			else if (address == 0x1814) {
 				GPU::sendCommandGP1(data);
 			}
+			//	I_STAT - Interrupt Status Register
+			else if (address == 0x1070) {
+				memConsole->info("Writing to I_STAT (${0:x})", data);
+				I_STAT = data;
+			}
+			//	I_MASK - Interrupt Mask Register
+			else if (address == 0x1074) {
+				memConsole->info("Writing to I_MASK (${0:x})", data);
+				I_MASK = data;
+			}
 
 			//	DMA Registers
 			else if (address >= 0x1080 && address < 0x1100) {
-				console->debug("DMA write at {0:x}", address);
+				memConsole->debug("DMA write at {0:x}", address);
+			}
+
+			//	all other writes
+			else {
+				memConsole->info("Writing to I/O {0:x}", address);
 			}
 		}
 
 		word readWord(word address) {
 			address = LOCALIZED_ADDRESS(address);
-			console->info("Reading from I/O {0:x}", address);
 
 			//	GPUREAD
 			if (address == 0x1810) {
@@ -167,16 +470,31 @@ class IO : public Mem {				//	8k - I/O
 			else if (address == 0x1814) {
 				return GPU::readGPUSTAT();
 			}
+			//	I_STAT - Interrupt Status Register
+			else if (address == 0x1070) {
+				memConsole->info("Reading from I_STAT");
+				return I_STAT;
+			}
+			//	I_MASK - Interrupt Mask Register
+			else if (address == 0x1074) {
+				memConsole->info("Reading from I_MASK");
+				return I_MASK;
+			}
 
 			//	DMA Registers
 			else if (address >= 0x1080 && address < 0x1100) {
-				console->debug("DMA read at {0:x}", address);
+				memConsole->debug("DMA read at {0:x}", address);
+			}
+
+			//	all other reads
+			else {
+				memConsole->info("Reading from I/O {0:x}", address);
 			}
 		}
 
 		byte readByte(word address) {
 			address = LOCALIZED_ADDRESS(address);
-			console->info("Reading from I/O {0:x}", address);
+			memConsole->info("Reading from I/O {0:x}", address);
 			return 0x00;
 		}
 } mIo;

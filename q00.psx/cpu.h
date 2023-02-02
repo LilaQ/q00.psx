@@ -12,12 +12,12 @@ namespace R3000A {
 		//	status reg
 		union {
 			struct {
-				u32 interrupt_enable : 1;
-				u32 mode : 1;
-				u32 prev_interrupt_disable : 1;
-				u32 prev_mode : 1;
-				u32 old_interrupt_disable : 1;
-				u32 old_mode : 1;
+				u32 current_interrupt_enable : 1;
+				u32 current_kerneluser_mode : 1;
+				u32 prev_interrupt_enable : 1;
+				u32 prev_kerneluser_mode : 1;
+				u32 old_interrupt_enable : 1;
+				u32 old_kerneluser_mode : 1;
 				u32 : 2;
 				u32 interrupt_mask : 8;
 				u32 isolate_cache : 1;
@@ -54,6 +54,8 @@ namespace R3000A {
 			u32 raw;
 		} cause;
 		static_assert(sizeof(sr) == sizeof(u32), "Union not at the expected size!");
+
+		u32 epc;
 
 		static const u8 cause_INT = 0x00;
 		static const u8 cause_AdEL = 0x04;

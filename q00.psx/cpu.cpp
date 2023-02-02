@@ -33,8 +33,14 @@ namespace CPU {
 		switch (cop_id) {
 		case 0:
 			switch (reg_id) {
-			case 0xc:
+			case 12:
 				cop[0].sr.raw = data;
+				break;
+			case 13:
+				cop[0].cause.raw = data;
+				break;
+			case 14:
+				cop[0].epc = CPU::registers.pc;
 				break;
 			default:
 				cop[0].r[reg_id] = data;
@@ -62,6 +68,9 @@ namespace CPU {
 					case 13:
 						return cop[0].cause.raw;
 						break;
+					case 14:
+						return cop[0].epc;
+						break;
 					default:
 						return cop[0].r[reg_id];
 						break;
@@ -70,6 +79,9 @@ namespace CPU {
 				console->error("Unimplemented COP {0:x} reg {1:x} access", cop_id, reg_id);
 				break;
 		}
+		console->error("Error while reading COP register");
+		exit(1);
+		return 0;
 	}
 }
 
@@ -113,6 +125,7 @@ void Opcode_JR(byte rs) {
 	}
 	else {
 		//	TODO:	Address Error Exception
+		console->error("JR - Address Error Exception");
 		exit(1);
 	}
 	console->debug("JR {0:s} [{1:08x}]", REG(rs), target);
@@ -470,21 +483,30 @@ void Opcode_SLTIU(byte rt, byte rs, i16 imm) {
 
 //	COP Opcodes
 void COP_Opcode_MTC(byte rt, byte rd, byte cop) {
-	console->debug("MTC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
+	console->info("MTC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
 	CPU::writeCOPReg(cop, rd, CPU::registers.r[rt]);
 }
 
 void COP_Opcode_MFC(byte rt, byte rd, byte cop) {
-	console->debug("MFC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
+	console->info("MFC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
 	CPU::registers.r[rt] = CPU::readCOPReg(cop, rd);
 }
 
-void Opcode_SYSCALL() {
-	//spdlog::set_level(spdlog::level::debug);
+void COP_Opcode_SYSCALL() {
 	CPU::registers.pc = (CPU::cop[0].sr.flags.boot_exception_vectors) ? EXC_VEC_GENERAL_BEV1 : EXC_VEC_GENERAL_BEV0;
 	CPU::registers.next_pc = CPU::registers.pc + 4;
 	CPU::cop[0].cause.excode = CPU::COP::cause_SYSCALL;
+	CPU::writeCOPReg(0, 14, CPU::registers.pc);
 	console->info("SYSCALL");
+}
+
+void COP_Opcode_RFE() {
+	//spdlog::set_level(spdlog::level::debug);
+	CPU::cop[0].sr.flags.current_interrupt_enable = CPU::cop[0].sr.flags.prev_interrupt_enable;
+	CPU::cop[0].sr.flags.current_kerneluser_mode = CPU::cop[0].sr.flags.prev_kerneluser_mode;
+	CPU::cop[0].sr.flags.prev_interrupt_enable = CPU::cop[0].sr.flags.old_interrupt_enable;
+	CPU::cop[0].sr.flags.prev_kerneluser_mode = CPU::cop[0].sr.flags.old_kerneluser_mode;
+	console->info("RFE");
 }
 
 
@@ -508,21 +530,25 @@ void CPU::step() {
 
 	//	COP
 	if (COP_COMMAND(opcode)) {
-		const u8 top6 = PRIMARY_OPCODE(opcode) >> 26;
+		const u8 top6 = PRIMARY_OPCODE(opcode);
 		const u8 top3 = top6 >> 3;
-		const u8 COP_ID = top6 & 0xff;
+		const u8 COP_ID = top6 & 0b11;
 
-		if (!imm5) {
+		if (!(SECONDARY_OPCODE(opcode))) {
 			switch (rs) {
 				case 0x0: COP_Opcode_MFC(rt, rd, COP_ID); break;
-				case 0x2: console->debug("CFCn {0:x}", COP_ID); exit(1); break;
+				case 0x2: console->info("CFCn {0:x}", COP_ID); exit(1); break;
 				case 0x4: COP_Opcode_MTC(rt, rd, COP_ID); break;
-				case 0x6: console->debug("CTCn {0:x}", COP_ID); exit(1); break;
+				case 0x6: console->info("CTCn {0:x}", COP_ID); exit(1); break;
 				case 0x8:
 					switch (rt) {
-						case 0x00: console->debug("BCnF {0:x}", COP_ID); exit(1); break;
-						case 0x01: console->debug("BCnT {0:x}", COP_ID); exit(1); break;
+						case 0x00: console->info("BCnF {0:x}", COP_ID); exit(1); break;
+						case 0x01: console->info("BCnT {0:x}", COP_ID); exit(1); break;
 					}
+					break;
+				default:
+					console->error("Illegal COP command {0:x}", opcode);
+					exit(1);
 					break;
 			}
 		}
@@ -530,18 +556,22 @@ void CPU::step() {
 			switch (top3) {
 				case 0x2:
 					switch (SECONDARY_OPCODE(opcode)) {
-					case 0x01: console->debug("COP0 TLBR (illegal)"); exit(1); break;
-					case 0x02: console->debug("COP0 TLBWI (illegal)"); exit(1); break;
-					case 0x06: console->debug("COP0 TLBWR (illegal)"); exit(1); break;
-					case 0x08: console->debug("COP0 TLBP (illegal)"); exit(1); break;
-					case 0x10: console->debug("COP0 RFE"); exit(1); break;
+					case 0x01: console->info("COP0 TLBR (illegal)"); exit(1); break;
+					case 0x02: console->info("COP0 TLBWI (illegal)"); exit(1); break;
+					case 0x06: console->info("COP0 TLBWR (illegal)"); exit(1); break;
+					case 0x08: console->info("COP0 TLBP (illegal)"); exit(1); break;
+					case 0x10: COP_Opcode_RFE(); break;
 					}
 					break;
 				case 0x6:
-					console->debug("LWCn RFE {0:x}", COP_ID); exit(1); break;
+					console->info("LWCn RFE {0:x}", COP_ID); exit(1); break;
 					break;
 				case 0x7:
-					console->debug("SWCn RFE {0:x}", COP_ID); exit(1); break;
+					console->info("SWCn RFE {0:x}", COP_ID); exit(1); break;
+					break;
+				default:
+					console->error("Illegal COP command {0:x}", opcode);
+					exit(1);
 					break;
 			}
 		} 
@@ -562,7 +592,7 @@ void CPU::step() {
 			case 0x07: Opcode_SRAV(rd, rt, rs); break;
 			case 0x08: Opcode_JR(rs); break;
 			case 0x09: Opcode_JALR(rd, rs); break;
-			case 0x0c: Opcode_SYSCALL(); break;
+			case 0x0c: COP_Opcode_SYSCALL(); break;
 
 				//	BREAK
 			case 0x0d:
