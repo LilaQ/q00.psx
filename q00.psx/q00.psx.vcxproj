@@ -147,11 +147,13 @@
     <ClCompile Include="gpu.cpp" />
     <ClCompile Include="mmu.cpp" />
     <ClCompile Include="q00.psx.cpp" />
+    <ClCompile Include="spu.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="fileimport.h" />
     <ClInclude Include="gpu.h" />
+    <ClInclude Include="spu.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>

@@ -2,6 +2,7 @@
 #include "cpu.h"
 #include "mmu.h"
 #include "gpu.h"
+#include "spu.h"
 #include "fileimport.h"
 #include "include/spdlog/spdlog.h"
 #include "include/spdlog/sinks/stdout_color_sinks.h"
@@ -19,6 +20,7 @@ int main(int argc, char* argv[]) {
     R3000A::init();
     Memory::init();
     GPU::init();
+    SPU::init();
     
     //  FileImport::loadEXE("CPUADD.exe");  - PASSED
     //  FileImport::loadEXE("CPUADDI.exe"); - PASSED

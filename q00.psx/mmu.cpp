@@ -3,6 +3,7 @@
 #include "mmu.h"
 #include "gpu.h"
 #include "cpu.h"
+#include "spu.h"
 #include "fileimport.h"
 #include <iostream>
 #include "include/spdlog/spdlog.h"
@@ -429,14 +430,33 @@ class IO : public Mem {				//	8k - I/O
 		void storeWord(word address, word data) {
 			address = LOCALIZED_ADDRESS(address);
 
+			//	Memory Control 1
+			if (address >= 0x1000 && address <= 0x1020) {
+				memConsole->info("Writing Memory Control 1 (${0:x})", address);
+				memory[address] = data & 0xff;
+				memory[address + 1] = (data >> 8) & 0xff;
+				memory[address + 2] = (data >> 16) & 0xff;
+				memory[address + 3] = (data >> 24) & 0xff;
+			}
+
+			//	Memory Control 2 
+			else if (address == 0x1060) {
+				memConsole->info("Writing Memory Control 2 (${0:x})", address);
+				memory[address] = data & 0xff;
+				memory[address + 1] = (data >> 8) & 0xff;
+				memory[address + 2] = (data >> 16) & 0xff;
+				memory[address + 3] = (data >> 24) & 0xff;
+			}
+
 			//	GP0 Send Command
-			if (address == 0x1810) {
+			else if (address == 0x1810) {
 				GPU::sendCommandGP0(data);
 			}
 			//	GP1 Send Command
 			else if (address == 0x1814) {
 				GPU::sendCommandGP1(data);
 			}
+
 			//	I_STAT - Interrupt Status Register
 			else if (address == 0x1070) {
 				memConsole->info("Writing to I_STAT (${0:x})", data);
@@ -453,9 +473,15 @@ class IO : public Mem {				//	8k - I/O
 				memConsole->debug("DMA write at {0:x}", address);
 			}
 
+			//	SPU
+			else if (address >= 0x1c00 && address < 0x2000) {
+				SPU::storeWord(address, data);
+			}
+
 			//	all other writes
 			else {
-				memConsole->info("Writing to I/O {0:x}", address);
+				console->error("Write to unknown destination {0:x}", address);
+				exit(1);
 			}
 		}
 
@@ -486,17 +512,64 @@ class IO : public Mem {				//	8k - I/O
 				memConsole->debug("DMA read at {0:x}", address);
 			}
 
+			//	SPU
+			else if (address >= 0x1c00 && address < 0x2000) {
+				return SPU::readWord(address);
+			}
+
 			//	all other reads
 			else {
-				memConsole->info("Reading from I/O {0:x}", address);
+				console->error("Read word from unknown destination {0:x}", address);
+				exit(1);
 			}
 		}
 
 		byte readByte(word address) {
 			address = LOCALIZED_ADDRESS(address);
-			memConsole->info("Reading from I/O {0:x}", address);
-			return 0x00;
+			
+			if (address >= 0x1c00 && address < 0x2000) {
+				return SPU::readByte(address);
+			}
+			else {
+				console->error("Read byte from unknown destination {0:x}", address);
+				exit(1);
+			}
 		}
+
+		void writeByte(word address, byte data) {
+			address = LOCALIZED_ADDRESS(address);
+			if (address >= 0x1c00 && address < 0x2000) {
+				return SPU::storeByte(address, data);
+			}
+			else {
+				console->error("Write to unknown destination");
+				exit(1);
+			}
+		}
+
+		hword readHalfword(word address) {
+			address = LOCALIZED_ADDRESS(address);
+			
+			if (address >= 0x1c00 && address < 0x2000) {
+				return SPU::readHalfword(address);
+			}
+			else {
+				console->error("Read hword from unknown destination {0:x}", address);
+				exit(1);
+			}
+		}
+
+		void writeHalfword(word address, hword data) {
+			address = LOCALIZED_ADDRESS(address);
+			if (address >= 0x1c00 && address < 0x2000) {
+				return SPU::storeHalfword(address, data);
+			}
+			else {
+				console->error("Write to unknown destination");
+				exit(1);
+			}
+		}
+
 } mIo;
 
 class Exp2 : public Mem {			//	8k - Expansion Region 2

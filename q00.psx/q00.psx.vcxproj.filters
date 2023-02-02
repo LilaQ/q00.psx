@@ -33,6 +33,9 @@
     <ClCompile Include="gpu.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
+    <ClCompile Include="spu.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="gpu.h">
@@ -43,6 +46,9 @@
     </ClInclude>
     <ClInclude Include="utils.h">
       <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="spu.h">
+      <Filter>Quelldateien</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
