@@ -3,6 +3,7 @@
 #include "mmu.h"
 #include "gpu.h"
 #include "spu.h"
+#include "ui.h"
 #include "fileimport.h"
 #include "include/spdlog/spdlog.h"
 #include "include/spdlog/sinks/stdout_color_sinks.h"
@@ -21,6 +22,7 @@ int main(int argc, char* argv[]) {
     Memory::init();
     GPU::init();
     SPU::init();
+    UI::init();
     
     // FileImport::loadEXE("CPUADD.exe"); // - PASSED
     // FileImport::loadEXE("CPUADDI.exe"); // - PASSED

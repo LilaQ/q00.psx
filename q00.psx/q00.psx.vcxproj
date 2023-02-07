@@ -116,7 +116,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\LilaQ\source\repos\q00.psx\q00.psx\include\SDL2\include;C:\Users\LilaQ\source\repos\q00.psx\q00.psx\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>imgui;C:\Users\LilaQ\source\repos\q00.psx\q00.psx\include\imgui-1.89.2;C:\Users\LilaQ\source\repos\q00.psx\q00.psx\include\SDL2\include;C:\Users\LilaQ\source\repos\q00.psx\q00.psx\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -146,15 +146,32 @@
     <ClCompile Include="cpu.cpp" />
     <ClCompile Include="fileimport.cpp" />
     <ClCompile Include="gpu.cpp" />
+    <ClCompile Include="include\imgui-1.89.2\backends\imgui_impl_sdl.cpp" />
+    <ClCompile Include="include\imgui-1.89.2\backends\imgui_impl_sdlrenderer.cpp" />
+    <ClCompile Include="include\imgui-1.89.2\imgui.cpp" />
+    <ClCompile Include="include\imgui-1.89.2\imgui_demo.cpp" />
+    <ClCompile Include="include\imgui-1.89.2\imgui_draw.cpp" />
+    <ClCompile Include="include\imgui-1.89.2\imgui_tables.cpp" />
+    <ClCompile Include="include\imgui-1.89.2\imgui_widgets.cpp" />
     <ClCompile Include="mmu.cpp" />
     <ClCompile Include="q00.psx.cpp" />
     <ClCompile Include="spu.cpp" />
+    <ClCompile Include="ui.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="fileimport.h" />
     <ClInclude Include="gpu.h" />
+    <ClInclude Include="include\imgui-1.89.2\backends\imgui_impl_sdl.h" />
+    <ClInclude Include="include\imgui-1.89.2\backends\imgui_impl_sdlrenderer.h" />
+    <ClInclude Include="include\imgui-1.89.2\imconfig.h" />
+    <ClInclude Include="include\imgui-1.89.2\imgui.h" />
+    <ClInclude Include="include\imgui-1.89.2\imgui_internal.h" />
+    <ClInclude Include="include\imgui-1.89.2\imstb_rectpack.h" />
+    <ClInclude Include="include\imgui-1.89.2\imstb_textedit.h" />
+    <ClInclude Include="include\imgui-1.89.2\imstb_truetype.h" />
     <ClInclude Include="spu.h" />
+    <ClInclude Include="ui.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
