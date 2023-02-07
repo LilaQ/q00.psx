@@ -1,5 +1,5 @@
-#include "cpu.h"
 #include "mmu.h"
+#include "cpu.h"
 #include <stdint.h>
 #include <sstream>
 #include <stdio.h>
@@ -228,43 +228,43 @@ void Opcode_LUI(byte rt, u16 imm) {
 void Opcode_LB(byte rt, i16 offset, byte base) {
 	console->debug("LB {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
-	CPU::registers.r[rt] = SIGN_EXT_BYTE_TO_WORD(Memory::fetchByte(vAddr));
+	CPU::registers.r[rt] = SIGN_EXT_BYTE_TO_WORD(Memory::fetch<byte>(vAddr));
 }
 
 void Opcode_LBU(byte base, byte rt, i16 offset) {
 	console->debug("LBU {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
-	CPU::registers.r[rt] = Memory::fetchByte(vAddr);
+	CPU::registers.r[rt] = Memory::fetch<byte>(vAddr);
 }
 
 void Opcode_SB(byte rt, i16 offset, byte base) {
 	console->debug("SB {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
-	Memory::storeByte(vAddr, CPU::registers.r[rt] & 0xff);
+	Memory::store<byte>(vAddr, CPU::registers.r[rt] & 0xff);
 }
 
 void Opcode_LH(byte rt, i16 offset, byte base) {
 	console->debug("LH {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
-	CPU::registers.r[rt] = SIGN_EXT_HWORD_TO_WORD(Memory::fetchHalfword(vAddr));
+	CPU::registers.r[rt] = SIGN_EXT_HWORD_TO_WORD(Memory::fetch<hword>(vAddr));
 }
 
 void Opcode_LHU(byte rt, i16 offset, byte base) {
 	console->debug("LHU {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
-	CPU::registers.r[rt] = Memory::fetchHalfword(vAddr);
+	CPU::registers.r[rt] = Memory::fetch<hword>(vAddr);
 }
 
 void Opcode_SH(byte rt, i16 offset, byte base) {
 	console->debug("SH {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
-	Memory::storeHalfword(vAddr, CPU::registers.r[rt] & 0xffff);
+	Memory::store<hword>(vAddr, CPU::registers.r[rt] & 0xffff);
 }
 
 void Opcode_LW(byte base, byte rt, i16 offset) {
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
-	console->debug("LW {0:s}, ${1:04x} ({2:s}) [{3:08x}] @ vAddr: {4:08x}", REG(rt), offset, REG(base), Memory::fetchWord(vAddr), vAddr);
-	CPU::registers.r[rt] = Memory::fetchWord(vAddr);
+	console->debug("LW {0:s}, ${1:04x} ({2:s}) [{3:08x}] @ vAddr: {4:08x}", REG(rt), offset, REG(base), Memory::fetch<word>(vAddr), vAddr);
+	CPU::registers.r[rt] = Memory::fetch<word>(vAddr);
 }
 
 void Opcode_LWL(byte rt, i16 offset, byte base) {
@@ -272,7 +272,8 @@ void Opcode_LWL(byte rt, i16 offset, byte base) {
 	word vAddr = CPU::registers.r[base] + SIGN_EXT32(offset);
 	const u8 shift = 8 * offset;
 
-	word hi = Memory::fetchWord(vAddr) << (24 - shift);
+	word raw = Memory::fetch<word>(vAddr);
+	word hi = Memory::fetch<word>(vAddr) << (24 - shift);
 	word lo = CPU::registers.r[rt] & (0xff'ffff >> shift);
 
 	CPU::registers.r[rt] = hi | lo;
@@ -283,7 +284,7 @@ void Opcode_LWR(byte rt, i16 offset, byte base) {
 	word vAddr = CPU::registers.r[base] + SIGN_EXT32(offset);
 	const u8 shift = 8 * offset;
 
-	word hi = Memory::fetchWord(vAddr) >> shift;
+	word hi = Memory::fetch<word>(vAddr) >> shift;
 	word lo = CPU::registers.r[rt] & ((u64)0xffff'ffff << (32 - shift));
 
 	CPU::registers.r[rt] = hi | lo;
@@ -293,16 +294,16 @@ void Opcode_SWL(byte rt, i16 offset, byte base) {
 	console->debug("SWL {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = CPU::registers.r[base] + SIGN_EXT32(offset);
 	const u8 shift = 8 * offset;
-	word content = Memory::fetchWord(vAddr) & ((u64)0xffff'ffff << (8 + shift));
-	Memory::storeWord(vAddr, (CPU::registers.r[rt] >> (24 - shift)) | content);
+	word content = Memory::fetch<word>(vAddr) & ((u64)0xffff'ffff << (8 + shift));
+	Memory::store<word>(vAddr, (CPU::registers.r[rt] >> (24 - shift)) | content);
 }
 
 void Opcode_SWR(byte rt, i16 offset, byte base) {
 	console->debug("SWR {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = CPU::registers.r[base] + SIGN_EXT32(offset);
 	const u8 shift = 8 * offset;
-	word content = Memory::fetchWord(vAddr) & ((u64)0xffff'ffff >> (32 - shift));
-	Memory::storeWord(vAddr, (CPU::registers.r[rt] << shift) | content);
+	word content = Memory::fetch<word>(vAddr) & ((u64)0xffff'ffff >> (32 - shift));
+	Memory::store<word>(vAddr, (CPU::registers.r[rt] << shift) | content);
 }
 
 
@@ -344,7 +345,7 @@ void Opcode_XORI(byte rt, byte rs, u16 imm) {
 void Opcode_SW(byte base, byte rt, i16 offset) {
 	console->debug("SW {0:s}, ${1:x} ({2:04x}) [{3:08x}]", REG(rt), offset, base, CPU::registers.r[rt]);
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
-	Memory::storeWord(vAddr, CPU::registers.r[rt]);
+	Memory::store<word>(vAddr, CPU::registers.r[rt]);
 }
 
 void Opcode_ADD(byte rd, byte rs, byte rt) {
@@ -483,12 +484,12 @@ void Opcode_SLTIU(byte rt, byte rs, i16 imm) {
 
 //	COP Opcodes
 void COP_Opcode_MTC(byte rt, byte rd, byte cop) {
-	console->info("MTC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
+	console->debug("MTC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
 	CPU::writeCOPReg(cop, rd, CPU::registers.r[rt]);
 }
 
 void COP_Opcode_MFC(byte rt, byte rd, byte cop) {
-	console->info("MFC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
+	console->debug("MFC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
 	CPU::registers.r[rt] = CPU::readCOPReg(cop, rd);
 }
 
@@ -497,23 +498,22 @@ void COP_Opcode_SYSCALL() {
 	CPU::registers.pc = (CPU::cop[0].sr.flags.boot_exception_vectors) ? EXC_VEC_GENERAL_BEV1 : EXC_VEC_GENERAL_BEV0;
 	CPU::registers.next_pc = CPU::registers.pc + 4;
 	CPU::cop[0].cause.excode = CPU::COP::cause_SYSCALL;
-	console->info("SYSCALL");
+	console->debug("SYSCALL");
 }
 
 void COP_Opcode_RFE() {
-	//spdlog::set_level(spdlog::level::debug);
 	CPU::cop[0].sr.flags.current_interrupt_enable = CPU::cop[0].sr.flags.prev_interrupt_enable;
 	CPU::cop[0].sr.flags.current_kerneluser_mode = CPU::cop[0].sr.flags.prev_kerneluser_mode;
 	CPU::cop[0].sr.flags.prev_interrupt_enable = CPU::cop[0].sr.flags.old_interrupt_enable;
 	CPU::cop[0].sr.flags.prev_kerneluser_mode = CPU::cop[0].sr.flags.old_kerneluser_mode;
-	console->info("RFE");
+	console->debug("RFE");
 }
 
 
 void CPU::step() {
 
 	CPU::registers.log_pc = CPU::registers.pc;
-	const word opcode = Memory::fetchWord(CPU::registers.pc);
+	const word opcode = Memory::fetch<word>(CPU::registers.pc);
 	console->debug("Processing opcode {0:08x}", opcode);
 
 	//	branch delay slot

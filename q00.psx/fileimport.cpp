@@ -81,12 +81,12 @@ void FileImport::saveFile(const char filename[], u8* data, u32 dataSize) {
 
 FileImport::PSX_FILE FileImport::loadFile(const char filename[]) {
 	streampos size;
-	byte* fileInMemory = new byte;
+	u8* fileInMemory = new u8;
 
 	ifstream file(filename, ios::in | ios::binary | ios::ate);
 	if (file.is_open()) {
 		size = file.tellg();
-		fileInMemory = new byte[size];
+		fileInMemory = new u8[size];
 		file.seekg(0, ios::beg);
 		file.read((char *)fileInMemory, size);
 		file.close();
