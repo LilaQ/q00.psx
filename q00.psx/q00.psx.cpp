@@ -10,6 +10,9 @@
 
 int main(int argc, char* argv[]) {
 
+    //	init timers
+    auto t_start = std::chrono::high_resolution_clock::now();
+
     //  Logger init
     auto console = spdlog::stdout_color_mt("Main");
     spdlog::set_pattern("[%T:%e] [%n] [%^%l%$] %v");
@@ -56,7 +59,13 @@ int main(int argc, char* argv[]) {
 
     while (1) {
         R3000A::step();
-        GPU::draw();
+
+        //  only execute every 1/60th of a second
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch() - t_start.time_since_epoch()).count() > 16.67) {
+            t_start = std::chrono::high_resolution_clock::now();
+            GPU::draw();
+            UI::draw();
+        }
     }
 
 }

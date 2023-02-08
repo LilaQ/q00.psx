@@ -6,6 +6,7 @@
 
 namespace UI {
 	void init();
+	void draw();
 }
 
 #endif

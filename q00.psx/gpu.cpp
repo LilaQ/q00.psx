@@ -55,9 +55,9 @@ void GPU::draw() {
 		GPU::lastUpdateTime = SDL_GetTicks();
 
 		// event handling
-		SDL_Event e;
+		/*SDL_Event e;
 		if (SDL_PollEvent(&e)) {
-		}
+		}*/
 
 		SDL_UpdateTexture(GPU::img, NULL, GPU::vram, VRAM_ROW_LENGTH * sizeof(u16));
 
