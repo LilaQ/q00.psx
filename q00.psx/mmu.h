@@ -476,15 +476,58 @@ namespace Memory {
 				}
 
 				else {
-					memConsole->error("Invalid DMA write at {0:x}", address);
+					memConsole->error("Invalid DMA read at {0:x}", address);
 				}
 			}
 
 			//	SPU
-			else if (address >= 0x1c00 && address < 0x2000) {
-				memConsole->error("SPU Write detected");
-				//return SPU::readWord(address);
-				exit(1);
+			else if (address >= 0x1f80'1c00 && address < 0x1f80'2000) {
+
+				//	SPUSTAT
+				if (address == 0x1f80'1dae) {
+					return SPU::readSPUSTAT();
+				}
+
+				//	SPUCNT
+				else if (address == 0x1f80'1daa) {
+					return SPU::readSPUCNT();
+				}
+
+				//	Voice Key ON
+				else if (address == 0x1f80'1d88) {
+					return SPU::readVoiceKeyOn();
+				}
+
+				//	Voice Key OFF
+				else if (address == 0x1f80'1d8c) {
+					return SPU::readVoiceKeyOff();
+				}
+
+				//	Voice ON/OFF
+				else if (address == 0x1f80'1d9c) {
+					return SPU::readVoiceOnOff();
+				}
+
+				//	Sound RAM data transfer address
+				else if (address == 0x1f80'1da6) {
+					return SPU::readSoundRAMDataTransferAddress();
+				}
+
+				//	Sound RAM data transfer fifo
+				else if (address == 0x1f80'1da8) {
+					return SPU::readSoundRAMDataTransferFifo();
+				}
+
+				//	Sound RAM data transfer control
+				else if (address == 0x1f80'1dac) {
+					return SPU::readSoundRAMDataTransferControl();
+				}
+
+				else {
+					memConsole->error("SPU read detected at {0:x}", address);
+					//return 0xffffffff;
+					exit(1);
+				}
 			}
 
 			//	all other reads
@@ -623,8 +666,129 @@ namespace Memory {
 			}
 
 			//	SPU
-			else if (address >= 0x1c00 && address < 0x2000) {
-				SPU::storeWord(address, data);
+			else if (address >= 0x1f80'1c00 && address < 0x1f80'2000) {
+
+				//	Voice volume
+				if (address >= 0x1f80'1c00 && address <= 0x1f80'1d7f) {
+					u8 voice = (address % 0x01f801c00) >> 4;
+					if ((address & 0b1111) == 0) {
+						SPU::writeVoiceVolumeLeft(data, voice);
+					}
+					else if ((address & 0b1111) == 2) {
+						SPU::writeVoiceVolumeRight(data, voice);
+					}
+					else if ((address & 0b1111) == 4) {
+						SPU::writeVoiceADPCMSampleRate(data, voice);
+					}
+				}
+
+				//	SPUSTAT
+				else if (address == 0x1f80'1dae) {
+					SPU::writeSPUSTAT;
+				}
+
+				//	SPUCNT
+				else if (address == 0x1f80'1daa) {
+					SPU::writeSPUCNT(data);
+				}
+
+				//	Mainvolume left
+				else if (address == 0x1f80'1d80) {
+					SPU::writeMainVolumeLeft(data);
+				}
+
+				//	Mainvolume right
+				else if (address == 0x1f80'1d82) {
+					SPU::writeMainVolumeRight(data);
+				}
+
+				//	Reverb output volume left
+				else if (address == 0x1f80'1d84) {
+					SPU::writeReverbOutputVolumeLeft(data);
+				}
+
+				//	Reverb output volume right
+				else if (address == 0x1f80'1d86) {
+					SPU::writeReverbOutputVolumeRight(data);
+				}
+
+				//	Voice Key ON
+				else if (address == 0x1f80'1d88) {
+					SPU::writeVoiceKeyOn(data);
+				}
+
+				//	Voice Key OFF
+				else if (address == 0x1f80'1d8c) {
+					SPU::writeVoiceKeyOff(data);
+				}
+				else if (address == 0x1f80'1d8e) {
+					SPU::writeVoiceKeyOff(data, true);
+				}
+
+				//	Pitch modulation enable flags
+				else if (address == 0x1f80'1d90) {
+					SPU::writePitchModulationEnableFlags(data);
+				}
+				else if (address == 0x1f80'1d92) {
+					SPU::writePitchModulationEnableFlags(data, true);
+				}
+
+				//	Voice Noise
+				else if (address == 0x1f80'1d94) {
+					SPU::writeVoiceNoise(data);
+				}
+				else if (address == 0x1f80'1d96) {
+					SPU::writeVoiceNoise(data, true);
+				}
+
+				//	Voice Reverb Mode
+				else if (address == 0x1f80'1d98) {
+					SPU::writeVoiceReverbMode(data);
+				}
+				else if (address == 0x1f80'1d9a) {
+					SPU::writeVoiceReverbMode(data, true);
+				}
+
+				//	Voice ON/OFF
+				else if (address == 0x1f80'1d9c) {
+					SPU::writeVoiceOnOff(data);
+				}
+
+				//	Sound RAM data transfer address
+				else if (address == 0x1f80'1da6) {
+					SPU::writeSoundRAMDataTransferAddress(data);
+				}
+
+				//	Sound RAM data transfer fifo
+				else if (address == 0x1f80'1da8) {
+					SPU::writeSoundRAMDataTransferFifo(data);
+				}
+
+				//	Sound RAM data transfer control
+				else if (address == 0x1f80'1dac) {
+					SPU::writeSoundRAMDataTransferControl(data);
+				}
+
+				//	CD audio input volume
+				else if (address == 0x1f80'1db0) {
+					SPU::writeCDAudioInputVolume(data);
+				}
+				else if (address == 0x1f80'1db2) {
+					SPU::writeCDAudioInputVolume(data, true);
+				}
+
+				//	External audio input volume
+				else if (address == 0x1f80'1db4) {
+					SPU::writeExternalAudioInputVolume(data);
+				}
+				else if (address == 0x1f80'1db6) {
+					SPU::writeExternalAudioInputVolume(data, true);
+				}
+
+				else {
+					memConsole->error("SPU Write detected to {0:x} at size {1:x}", address, sizeof(T));
+					exit(1);
+				}
 			}
 
 		}
