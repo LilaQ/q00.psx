@@ -39,17 +39,17 @@ namespace SPU {
 	} spucnt;
 	static_assert(sizeof(spucnt) == sizeof(u16), "Union not at the expected size!");
 
-	MainVolume main_volume_left;
-	MainVolume main_volume_right;
+	//	voice registers
 	MainVolume voice_volume_left[24];
 	MainVolume voice_volume_right[24];
+	u16 adpcm_sample_rate[24];
+	u16 adsr_current_volume[24];
 
+	//	control registers
+	MainVolume main_volume_left;
+	MainVolume main_volume_right;
 	i16 reverb_output_volume_left = 0;
 	i16 reverb_output_volume_right = 0;
-
-	u16 sound_ram_data_transfer_address = 0;
-	u16 sound_ram_data_transfer_fifo = 0;
-	u16 sound_ram_data_transfer_type = 0;
 
 	u32 voice_key_on = 0;
 	u32 voice_key_off = 0;
@@ -57,9 +57,17 @@ namespace SPU {
 	u32 pitch_modulation_enable_flags = 0;
 	u32 voice_noise = 0;
 	u32 voice_reverb_mode = 0;
+
+	u16 sound_ram_reverb_work_area_start_address = 0;
+	u16 sound_ram_data_transfer_address = 0;
+	u16 sound_ram_data_transfer_fifo = 0;
+	u16 sound_ram_data_transfer_type = 0;
+	
 	Volume cd_audio_input_volume;
 	Volume external_audio_input_volume;
-	u16 voice_adpcm_sample_rate[24];
+
+	//	reverb configuration area
+	u16 reverb_configuration_area[0x40];
 }
 
 void SPU::init() {
@@ -99,7 +107,7 @@ void SPU::writeVoiceVolumeRight(u16 data, u8 voice) {
 }
 
 void SPU::writeVoiceADPCMSampleRate(u16 data, u8 voice) {
-	voice_adpcm_sample_rate[voice] = data;
+	adpcm_sample_rate[voice] = data;
 }
 
 void SPU::writeReverbOutputVolumeLeft(u16 data) {
@@ -134,6 +142,10 @@ void SPU::writeVoiceReverbMode(u16 data, bool upperHWord) {
 	write32bRegister(&voice_reverb_mode, data, upperHWord);
 }
 
+void SPU::writeSoundRAMDataReverbWorkAreaStartAddress(u16 data) {
+	sound_ram_reverb_work_area_start_address = data;
+}
+
 void SPU::writeSoundRAMDataTransferAddress(u16 data) {
 	sound_ram_data_transfer_address = data;
 }
@@ -154,6 +166,10 @@ void SPU::writeExternalAudioInputVolume(u16 data, bool upperHWord) {
 	write32bRegister(&external_audio_input_volume.raw, data, upperHWord);
 }
 
+void SPU::writeReverbConfiguration(u16 data, u16 offset) {
+	reverb_configuration_area[offset] = data;
+}
+
 
 
 //	Reads
@@ -166,16 +182,16 @@ u16 SPU::readSPUCNT() {
 	return spucnt.raw;
 }
 
-u32 SPU::readVoiceKeyOn() {
-	return voice_key_on;
+u32 SPU::readVoiceKeyOn(bool upperHWord) {
+	return read32bRegister(&voice_key_on);
 }
 
-u32 SPU::readVoiceKeyOff() {
-	return voice_key_off;
+u32 SPU::readVoiceKeyOff(bool upperHWord) {
+	return read32bRegister(&voice_key_off);
 }
 
-u32 SPU::readVoiceOnOff() {
-	return voice_on_off;
+u32 SPU::readVoiceOnOff(bool upperHWord) {
+	return read32bRegister(&voice_on_off);
 }
 
 u16 SPU::readSoundRAMDataTransferAddress() {
@@ -188,4 +204,8 @@ u16 SPU::readSoundRAMDataTransferFifo() {
 
 u16 SPU::readSoundRAMDataTransferControl() {
 	return sound_ram_data_transfer_type << 1;
+}
+
+u16 SPU::readVoiceCurrentADSRVolume(u8 voice) {
+	return adsr_current_volume[voice];
 }

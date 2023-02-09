@@ -483,8 +483,25 @@ namespace Memory {
 			//	SPU
 			else if (address >= 0x1f80'1c00 && address < 0x1f80'2000) {
 
+				//	Voice volume
+				if (address >= 0x1f80'1c00 && address <= 0x1f80'1d7f) {
+					u8 voice = (address % 0x01f801c00) >> 4;
+					if ((address & 0b1111) == 0) {
+						//SPU::writeVoiceVolumeLeft(data, voice);
+					}
+					else if ((address & 0b1111) == 2) {
+						//SPU::writeVoiceVolumeRight(data, voice);
+					}
+					else if ((address & 0b1111) == 4) {
+						//SPU::writeVoiceADPCMSampleRate(data, voice);
+					}
+					else if ((address & 0b1111) == 0xc) {
+						return SPU::readVoiceCurrentADSRVolume(voice);
+					}
+				}
+
 				//	SPUSTAT
-				if (address == 0x1f80'1dae) {
+				else if (address == 0x1f80'1dae) {
 					return SPU::readSPUSTAT();
 				}
 
@@ -497,10 +514,16 @@ namespace Memory {
 				else if (address == 0x1f80'1d88) {
 					return SPU::readVoiceKeyOn();
 				}
+				else if (address == 0x1f80'1d8a) {
+					return SPU::readVoiceKeyOn(true);
+				}
 
 				//	Voice Key OFF
 				else if (address == 0x1f80'1d8c) {
 					return SPU::readVoiceKeyOff();
+				}
+				else if (address == 0x1f80'1d8e) {
+					return SPU::readVoiceKeyOff(true);
 				}
 
 				//	Voice ON/OFF
@@ -716,6 +739,9 @@ namespace Memory {
 				else if (address == 0x1f80'1d88) {
 					SPU::writeVoiceKeyOn(data);
 				}
+				else if (address == 0x1f80'1d8a) {
+					SPU::writeVoiceKeyOn(data, true);
+				}
 
 				//	Voice Key OFF
 				else if (address == 0x1f80'1d8c) {
@@ -754,6 +780,11 @@ namespace Memory {
 					SPU::writeVoiceOnOff(data);
 				}
 
+				//	Sound RAM data reverb work area start address
+				else if (address == 0x1f80'1da2) {
+					SPU::writeSoundRAMDataReverbWorkAreaStartAddress(data);
+				}
+
 				//	Sound RAM data transfer address
 				else if (address == 0x1f80'1da6) {
 					SPU::writeSoundRAMDataTransferAddress(data);
@@ -783,6 +814,11 @@ namespace Memory {
 				}
 				else if (address == 0x1f80'1db6) {
 					SPU::writeExternalAudioInputVolume(data, true);
+				}
+
+				//	Reverb configuration
+				else if (address >= 0x1f80'1dc0 && address < 0x1f80'1e00) {
+					SPU::writeReverbConfiguration(data, address & 0x1f80'1dc0);
 				}
 
 				else {

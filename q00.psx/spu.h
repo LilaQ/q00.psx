@@ -49,13 +49,20 @@ namespace SPU {
 	void write32bRegister(u32* reg, u16 data, bool upperHWord = false);
 	u16 read32bRegister(u32* reg, bool upperHWord = false);
 
+
+	//	Writes
+	//:::::::::
+
+	//	Voice registers
+	void writeVoiceVolumeLeft(u16 data, u8 voice);
+	void writeVoiceVolumeRight(u16 data, u8 voice);
+	void writeVoiceADPCMSampleRate(u16 data, u8 voice);
+
+	//	Control registers
 	void writeSPUSTAT(u16 data);
 	void writeSPUCNT(u16 data);
 	void writeMainVolumeLeft(u16 data);
 	void writeMainVolumeRight(u16 data);
-	void writeVoiceVolumeLeft(u16 data, u8 voice);
-	void writeVoiceVolumeRight(u16 data, u8 voice);
-	void writeVoiceADPCMSampleRate(u16 data, u8 voice);
 	void writeReverbOutputVolumeLeft(u16 data);
 	void writeReverbOutputVolumeRight(u16 data);
 	void writeVoiceKeyOn(u16 data, bool upperHWord = false);
@@ -64,20 +71,34 @@ namespace SPU {
 	void writePitchModulationEnableFlags(u16 data, bool upperHWord = false);
 	void writeVoiceNoise(u16 data, bool upperHWord = false);
 	void writeVoiceReverbMode(u16 data, bool upperHWord = false);
+	void writeSoundRAMDataReverbWorkAreaStartAddress(u16 data);
 	void writeSoundRAMDataTransferAddress(u16 data);
 	void writeSoundRAMDataTransferFifo(u16 data);
 	void writeSoundRAMDataTransferControl(u16 data);
 	void writeCDAudioInputVolume(u16 data, bool upperHWord = false);
 	void writeExternalAudioInputVolume(u16 data, bool upperHWord = false);
+
+	//	Reverb configuration
+	void writeReverbConfiguration(u16 data, u16 offset);
 	
+
+	//	Reads
+	//:::::::::
+
+	//	Voice registers
+	u16 readVoiceCurrentADSRVolume(u8 voice);
+
+	//	Control registers
 	u16 readSPUSTAT();
 	u16 readSPUCNT();
-	u32 readVoiceKeyOn();
-	u32 readVoiceKeyOff();
-	u32 readVoiceOnOff();
+	u32 readVoiceKeyOn(bool upperHWord = false);
+	u32 readVoiceKeyOff(bool upperHWord = false);
+	u32 readVoiceOnOff(bool upperHWord = false);
 	u16 readSoundRAMDataTransferAddress();
 	u16 readSoundRAMDataTransferFifo();
 	u16 readSoundRAMDataTransferControl();
+
+	
 
 }
 
