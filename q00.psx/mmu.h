@@ -5,32 +5,13 @@
 #include "gpu.h"
 #include "cpu.h"
 #include "spu.h"
+#include "dma.h"
 #include "include/spdlog/spdlog.h"
 #include "include/spdlog/sinks/stdout_color_sinks.h"
 #define MASKED_ADDRESS(a) (a & 0x1fff'ffff)
 #define SHOW_BIOS_FUNCTIONS false
 
 namespace Memory {
-
-	union DMA_Control_Reg {
-		struct {
-			u32 transfer_direction : 1;
-			u32 memory_address_step : 1;
-			u32 : 6;
-			u32 chopping_enable : 1;
-			u32 sync_mode : 2;
-			u32 : 5;
-			u32 chopping_dma_window_size : 3;
-			u32 : 1;
-			u32 start_busy : 1;
-			u32 : 3;
-			u32 start_trigger : 1;
-			u32 : 3;
-		} flags;
-		u32 raw;
-	};
-	extern DMA_Control_Reg dma_control_regs[];
-	extern u32 dma_base_address[];
 
 	static const char* A_FUNC_LUT[] = {
 	"open(filename,accessmode)",
@@ -305,8 +286,27 @@ namespace Memory {
 		"get_card_find_mode()"
 	};
 
-	extern u32 I_STAT;
-	extern u32 I_MASK;
+	union I_STAT_MASK {
+		struct {
+			u32 irq0_vblank : 1;
+			u32 irq1_gpu : 1;
+			u32 irq2_cdrom : 1;
+			u32 irq3_dma : 1;
+			u32 irq4_tmr0 : 1;
+			u32 irq5_tmr1 : 1;
+			u32 irq6_tmr2 : 1;
+			u32 irq7_controller_and_memcard_byte_received : 1;
+			u32 irq8_sio : 1;
+			u32 irq9_spu : 1;
+			u32 irq10_controller_lightpen : 1;
+			u32 : 21;
+		};
+		u32 raw;
+	};
+	static_assert(sizeof(I_STAT_MASK) == sizeof(u32), "Union not at the expected size!");
+
+	extern I_STAT_MASK I_STAT;
+	extern I_STAT_MASK I_MASK;
 	extern u8* memory;
 	extern std::shared_ptr<spdlog::logger> memConsole;
 
@@ -432,51 +432,50 @@ namespace Memory {
 			//	I_STAT - Interrupt Status Register
 			else if (address == 0x1f80'1070) {
 				memConsole->debug("Reading from I_STAT");
-				return I_STAT;
+				return I_STAT.raw;
 			}
 			
 			//	I_MASK - Interrupt Mask Register
 			else if (address == 0x1f80'1074) {
 				memConsole->debug("Reading from I_MASK");
-				return I_MASK;
+				return I_MASK.raw;
 			}
 
 			//	DMA Registers
 			else if (address >= 0x1f80'1080 && address < 0x1f80'1100) {
-				memConsole->debug("DMA read at {0:x}", address);
 				u8 channel = (address % 0x1f80'1084) >> 4;
 
 				//	DMA control register
 				if (address == 0x1f80'10f0) {
-					memConsole->info("Reading DMA control register");
-					//	TODO
+					return DMA::readDMAControlRegister();
 				}
 
 				//	DMA interrupt register
 				else if (address == 0x1f80'10f4) {
-					memConsole->info("Reading DMA interrupt register");
-					//	TODO
+					return DMA::readDMAInterruptRegister();
 				}
 					
 				//	DMA base address (for channel N)
 				else if ((address & 0b1111) == 0) {
-					memConsole->info("Reading DMA (channel {0:x}) base address [${1:08x}]", channel, address);
-					return dma_base_address[channel];
+					memConsole->error("Reading DMA (channel {0:x}) base address [${1:08x}]", channel, address);
+					exit(1);
 				}
 
 				//	DMA block control
 				else if ((address & 0b1111) == 4) {
-
+					memConsole->error("Reading DMA (channel {0:x}) block control [${1:08x}]", channel, address);
+					exit(1);
 				}
 
 				//	DMA channel control
 				else if ((address & 0b1111) == 8) {
-					memConsole->info("Reading DMA (channel {0:x}) channel control", channel);
-					return dma_control_regs[channel].raw;
+					memConsole->error("Reading DMA (channel {0:x}) channel control [${1:08x}]", channel, address);
+					exit(1);
 				}
 
 				else {
 					memConsole->error("Invalid DMA read at {0:x}", address);
+					exit(1);
 				}
 			}
 
@@ -638,53 +637,49 @@ namespace Memory {
 
 			//	I_STAT - Interrupt Status Register
 			else if (address == 0x1f80'1070) {
+				I_STAT.raw = data;
 				memConsole->info("Writing to I_STAT (${0:x})", data);
-				I_STAT = data;
 			}
 
 			//	I_MASK - Interrupt Mask Register
 			else if (address == 0x1f80'1074) {
+				I_MASK.raw = data;
 				memConsole->info("Writing to I_MASK (${0:x})", data);
-				I_MASK = data;
 			}
 
 			//	DMA Registers
 			else if (address >= 0x1f80'1080 && address < 0x1f80'1100) {
-				memConsole->debug("DMA write at {0:x}", address);
 				u8 channel = (address % 0x1f80'1084) >> 4;
 
 				//	DMA control register
 				if (address == 0x1f80'10f0) {
-					memConsole->info("Writing DMA control register");
-					//	TODO
+					DMA::writeDMAControlRegister(data);
 				}
 
 				//	DMA interrupt register
 				else if (address == 0x1f80'10f4) {
-					memConsole->info("Writing DMA interrupt register");
-					//	TODO
+					DMA::writeDMAInterruptRegister(data);
 				}
 
 				//	DMA base address (for channel N)
 				else if ((address & 0b1111) == 0) {
 					u32 addr = data & 0xff'ffff;
-					memConsole->info("Setting DMA (channel {0:x}) base address 0x{1:x}", channel, addr);
-					dma_base_address[channel] = addr;
+					DMA::writeDMABaseAddress(addr, channel);
 				}
 
 				//	DMA block control
 				else if ((address & 0b1111) == 4) {
-
+					DMA::writeDMABlockControl(data, channel);
 				}
 
 				//	DMA channel control
 				else if ((address & 0b1111) == 8) {
-					dma_control_regs[channel].raw = data;
-					memConsole->info("Setting DMA (channel {0:x}) channel control 0x{1:x}", channel, data);
+					DMA::writeDMAChannelControl(data, channel);
 				}
 
 				else {
 					memConsole->error("Invalid DMA write at {0:x}", address);
+					exit(1);
 				}
 			}
 
@@ -818,7 +813,7 @@ namespace Memory {
 
 				//	Reverb configuration
 				else if (address >= 0x1f80'1dc0 && address < 0x1f80'1e00) {
-					SPU::writeReverbConfiguration(data, address & 0x1f80'1dc0);
+					SPU::writeReverbConfiguration(data, address - 0x1f80'1dc0);
 				}
 
 				else {

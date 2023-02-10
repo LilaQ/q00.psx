@@ -66,6 +66,9 @@
     <ClCompile Include="include\imgui-1.89.2\imgui_demo.cpp">
       <Filter>Quelldateien\imgui</Filter>
     </ClCompile>
+    <ClCompile Include="dma.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="gpu.h">
@@ -106,6 +109,9 @@
     </ClInclude>
     <ClInclude Include="include\imgui-1.89.2\imstb_textedit.h">
       <Filter>Headerdateien\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="dma.h">
+      <Filter>Headerdateien</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

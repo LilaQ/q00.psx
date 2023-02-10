@@ -15,13 +15,10 @@
 #define CPU R3000A
 
 namespace Memory {
-	u32 I_STAT;
-	u32 I_MASK;
+	I_STAT_MASK I_STAT;
+	I_STAT_MASK I_MASK;
 	u8* memory = new u8[0x2000'0000];
 	std::shared_ptr<spdlog::logger> memConsole = spdlog::stdout_color_mt("Memory");
-	DMA_Control_Reg dma_control_regs[6];
-	static_assert(sizeof(dma_control_regs[0]) == sizeof(u32), "Union not at the expected size!");
-	u32 dma_base_address[6];
 }
 
 void Memory::init() { 
