@@ -457,8 +457,10 @@ namespace Memory {
 					
 				//	DMA base address (for channel N)
 				else if ((address & 0b1111) == 0) {
-					memConsole->error("Reading DMA (channel {0:x}) base address [${1:08x}]", channel, address);
-					exit(1);
+					if (channel == 1) {
+						spdlog::set_level(spdlog::level::debug);
+					}
+					return DMA::readDMABaseAddress(channel);
 				}
 
 				//	DMA block control
@@ -469,8 +471,7 @@ namespace Memory {
 
 				//	DMA channel control
 				else if ((address & 0b1111) == 8) {
-					memConsole->error("Reading DMA (channel {0:x}) channel control [${1:08x}]", channel, address);
-					exit(1);
+					return DMA::readDMAChannelControl(channel);
 				}
 
 				else {
@@ -550,6 +551,12 @@ namespace Memory {
 					//return 0xffffffff;
 					exit(1);
 				}
+			}
+
+			//	Timers
+			else if (address >= 0x1f80'1100 && address < 0x1f80'1128) {
+				memConsole->error("Implement timers, bitch! {0:x}", address);
+				exit(1);
 			}
 
 			//	all other reads
@@ -649,7 +656,7 @@ namespace Memory {
 
 			//	DMA Registers
 			else if (address >= 0x1f80'1080 && address < 0x1f80'1100) {
-				u8 channel = (address % 0x1f80'1084) >> 4;
+				u8 channel = (address % 0x1f80'1080) >> 4;
 
 				//	DMA control register
 				if (address == 0x1f80'10f0) {
@@ -832,6 +839,8 @@ namespace Memory {
 			storeToMemory<T>(address, data);
 		}
 	}
+
+	void initEmptyOrderingTable(word base_address, word number_of_words);
 
 	void loadToRAM(word, byte*, word, word);
 	void loadBIOS(byte* source, word size);

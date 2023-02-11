@@ -2,7 +2,7 @@
 #include "include/spdlog/spdlog.h"
 #include "include/spdlog/sinks/stdout_color_sinks.h"
 #include <SDL.h>
-#include <vector>
+#include <deque>
 #define GPU_COMMAND_TYPE(a) (a >> 24) & 0xff
 #define GP1_PARAMETER(a) a & 0xff'ffff
 #define RGB_8BIT_TO_5BIT(a) (a >> 3)
@@ -12,23 +12,23 @@ static auto console = spdlog::stdout_color_mt("GPU");
 
 namespace GPU {
 
-	enum class SEMI_TRANSPARENCY { back_half_plus_front_half = 0, back_plus_front = 1, back_minus_front = 2, back_plus_front_quarter = 3 };
-	enum class TEXTURE_PAGE_COLORS { col_4b = 0, col_8b = 1, col_15b = 2, reserved = 3 };
-	enum class DITHER { off_strip_lsbs = 0, dither_enabled = 1 };
-	enum class DRAWING_TO_DISPLAY_AREA { prohibited = 0, allowed = 1 };
-	enum class SET_MASK_BIT { no = 0, yes_mask = 1 };
-	enum class DRAW_PIXELS { always = 0, not_to_masked_areas = 1 };
-	enum class REVERSEFLAG { normal = 0, distorted = 1 };
-	enum class TEXTURE_DISABLE { normal = 0, disable_textures = 1 };
-	enum class VIDEO_MODE { ntsc_60hz = 0, pal_50hz = 1 };
-	enum class COLOR_DEPTH { depth_15b = 0, depth_24b = 1 };
-	enum class VERTICAL_INTERLACE { off = 0, on = 1 };
-	enum class DISPLAY_ENABLE { enabled = 0, disabled = 1 };
-	enum class INTERRUPT_REQUEST { off = 0, irq = 1 };
-	enum class DMA_DATA_REQUEST { always_zero = 0, fifo_state };
-	enum class READY_STATE { not_ready = 0, ready = 1 };
-	enum class DMA_DIRECTION { off = 0, unknown_val1 = 1, cpu_to_gp0 = 2, gpuread_to_cpu = 3 };
-	enum class EVEN_ODD { even_or_vblank = 0, odd = 1 };
+	enum class SEMI_TRANSPARENCY : u32 { back_half_plus_front_half = 0, back_plus_front = 1, back_minus_front = 2, back_plus_front_quarter = 3 };
+	enum class TEXTURE_PAGE_COLORS : u32 { col_4b = 0, col_8b = 1, col_15b = 2, reserved = 3 };
+	enum class DITHER : u32 { off_strip_lsbs = 0, dither_enabled = 1 };
+	enum class DRAWING_TO_DISPLAY_AREA : u32 { prohibited = 0, allowed = 1 };
+	enum class SET_MASK_BIT : u32 { no = 0, yes_mask = 1 };
+	enum class DRAW_PIXELS : u32 { always = 0, not_to_masked_areas = 1 };
+	enum class REVERSEFLAG : u32 { normal = 0, distorted = 1 };
+	enum class TEXTURE_DISABLE : u32 { normal = 0, disable_textures = 1 };
+	enum class VIDEO_MODE : u32 { ntsc_60hz = 0, pal_50hz = 1 };
+	enum class COLOR_DEPTH : u32 { depth_15b = 0, depth_24b = 1 };
+	enum class VERTICAL_INTERLACE : u32 { off = 0, on = 1 };
+	enum class DISPLAY_ENABLE : u32 { enabled = 0, disabled = 1 };
+	enum class INTERRUPT_REQUEST : u32 { off = 0, irq = 1 };
+	enum class DMA_DATA_REQUEST : u32 { always_zero = 0, fifo_state };
+	enum class READY_STATE : u32 { not_ready = 0, ready = 1 };
+	enum class DMA_DIRECTION : u32 { off = 0, unknown_val1 = 1, cpu_to_gp0 = 2, gpuread_to_cpu = 3 };
+	enum class EVEN_ODD : u32 { even_or_vblank = 0, odd = 1 };
 
 	union GPUSTAT {
 		private:
@@ -71,8 +71,20 @@ namespace GPU {
 			}
 	} gpustat;
 
-	std::vector<u32> gp0_fifoBuffer;
+	std::deque<u32> fifoBuffer;
 	u16* vram;
+
+	//	copy rectangle (vram to cpu)
+	namespace copy_rectangle_vram_to_cpu {
+		u16 yPos, xPos, ySiz, xSiz;
+		word pos;
+
+		u16 read() {
+			u16 s = VRAM_ROW_LENGTH * yPos + xPos;
+			u32 a = (yPos + (pos % s) / xSiz) * VRAM_ROW_LENGTH + xPos + (pos % s) % xSiz;
+			return vram[a];
+		}
+	}
 
 	//	SDL
 	void setupSDL();
@@ -136,9 +148,9 @@ void GPU::sendCommandGP0(word cmd) {
 		It is accessed via coordinates, ranging from 
 		(0,0)=Upper-Left to (N,511)=Lower-Right.
 	*/
-	gp0_fifoBuffer.push_back(cmd);
+	fifoBuffer.push_back(cmd);
 
-	word currentCommand = gp0_fifoBuffer.front();
+	word currentCommand = fifoBuffer.front();
 	word cmdType = GPU_COMMAND_TYPE(currentCommand);
 	word cmdParameter = GP1_PARAMETER(currentCommand);
 
@@ -148,18 +160,18 @@ void GPU::sendCommandGP0(word cmd) {
 	
 	if (cmdType == 0x00) {
 		console->info("GP0 Nop");
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 	}
-	else if (cmdType == 0x01 && gp0_fifoBuffer.size() == 1) {
+	else if (cmdType == 0x01 && fifoBuffer.size() == 1) {
 		console->info("GP0 (01h) Clear Cache");
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 	}
-	else if (cmdType == 0x02 && gp0_fifoBuffer.size() == 3) {
-		u16 rgb = convertBGR24btoRGB16b(0xffffff & gp0_fifoBuffer[0]);
-		u16 yPos = gp0_fifoBuffer[1] >> 16;
-		u16 xPos = gp0_fifoBuffer[1] & 0xffff * 0x10;
-		u16 ySiz = gp0_fifoBuffer[2] >> 16;
-		u16 xSiz = gp0_fifoBuffer[2] & 0xffff * 0x10;
+	else if (cmdType == 0x02 && fifoBuffer.size() == 3) {
+		u16 rgb = convertBGR24btoRGB16b(0xffffff & fifoBuffer[0]);
+		u16 yPos = fifoBuffer[1] >> 16;
+		u16 xPos = fifoBuffer[1] & 0xffff * 0x10;
+		u16 ySiz = fifoBuffer[2] >> 16;
+		u16 xSiz = fifoBuffer[2] & 0xffff * 0x10;
 
 		for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
 			for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
@@ -168,25 +180,25 @@ void GPU::sendCommandGP0(word cmd) {
 		}
 
 		console->info("GP0 (02h) Fill Rectangle in VRAM\nXpos: {0:x}h, Ypos: {1:x}h, Xsiz: {2:x}h, Ysiz: {3:x}h, RGB: {4:x}h", xPos, yPos, xSiz, ySiz, rgb);
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 	}
-	else if (cmdType == 0x80 && gp0_fifoBuffer.size() == 4) {
+	else if (cmdType == 0x80 && fifoBuffer.size() == 4) {
 		console->info("GP0 (80h) Copy Rectangle (VRAM to VRAM)\nXpos: {0:x}, Ypos: {1:x}, Xsiz: {2:x}");
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 	}
-	else if (cmdType == 0xa0 && gp0_fifoBuffer.size() > 3 ) {
+	else if (cmdType == 0xa0 && fifoBuffer.size() > 3 ) {
 		//	calculate if the data is done already, or if we are expecting more
 		//	data being sent to GPU via command
-		u16 yPos = gp0_fifoBuffer[1] >> 16;
-		u16 xPos = gp0_fifoBuffer[1] & 0xffff;
-		u16 ySiz = gp0_fifoBuffer[2] >> 16;
-		u16 xSiz = gp0_fifoBuffer[2] & 0xffff;
+		u16 yPos = fifoBuffer[1] >> 16;
+		u16 xPos = fifoBuffer[1] & 0xffff;
+		u16 ySiz = fifoBuffer[2] >> 16;
+		u16 xSiz = fifoBuffer[2] & 0xffff;
 		u16 expectedDataSize = xSiz * ySiz;
-		if ((gp0_fifoBuffer.size() - 3) * 2 == expectedDataSize) {
+		if ((fifoBuffer.size() - 3) * 2 == expectedDataSize) {
 			std::vector<u16> data;
-			for (u16 row = 3; row < gp0_fifoBuffer.size(); row++) {
-				data.push_back(gp0_fifoBuffer[row] & 0xffff);
-				data.push_back(gp0_fifoBuffer[row] >> 16);
+			for (u16 row = 3; row < fifoBuffer.size(); row++) {
+				data.push_back(fifoBuffer[row] & 0xffff);
+				data.push_back(fifoBuffer[row] >> 16);
 			}
 			console->info("GP0 (a0h) Copy Rectangle (CPU to VRAM)");
 			int c = 0;
@@ -195,32 +207,43 @@ void GPU::sendCommandGP0(word cmd) {
 					vram[yS * VRAM_ROW_LENGTH + xS] = data[c++];
 				}
 			}
-			gp0_fifoBuffer.clear();
+			fifoBuffer.clear();
 		}
 	}
-	else if (cmdType == 0xc0 && gp0_fifoBuffer.size() == 3) {
+
+	//	
+	else if (cmdType == 0xc0 && fifoBuffer.size() == 3) {
 		console->info("GP0 (c0h) Copy Rectangle (VRAM to CPU)");
-		gp0_fifoBuffer.clear();
+
+		//	get GPUREAD ready, so CPU can read from it
+		copy_rectangle_vram_to_cpu::pos = 0;
+		copy_rectangle_vram_to_cpu::yPos = fifoBuffer[1] >> 16;
+		copy_rectangle_vram_to_cpu::xPos = fifoBuffer[1] & 0xffff;
+		copy_rectangle_vram_to_cpu::ySiz = fifoBuffer[2] >> 16;
+		copy_rectangle_vram_to_cpu::xSiz = fifoBuffer[2] & 0xffff;
+		gpustat.flags.ready_to_send_vram_to_cpu = READY_STATE::ready;
+
+		fifoBuffer.clear();
 	}
 	else if (cmdType == 0x03) {
 		console->info("GP0 Unknown");
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 	}
 	else if (cmdType == 0x1f) {
 		console->info("GP0 Interrupt Request (IRQ1)");
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 	}
 	else if (cmdType >= 0x20 && cmdType < 0x40) {
 		console->info("GP0 Render Polygons");
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 	}
 	else if (cmdType >= 0x40 && cmdType < 0x60) {
 		console->info("GP0 Render Lines");
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 	}
 	else if (cmdType >= 0x60 && cmdType < 0x80) {
 		console->info("GP0 Render Rectangles");
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 	}
 
 	//	Draw mode settings
@@ -237,7 +260,7 @@ void GPU::sendCommandGP0(word cmd) {
 		//	TODO: Textured Rectangle X-Flip = (cmdParameter >> 12) & 1
 		//	TODO: Textured Rectangle Y-Flip = (cmdParameter >> 13) & 1
 
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 	}
 
 	//	Unhandled
@@ -260,7 +283,7 @@ void GPU::sendCommandGP1(word cmd) {
 	//	Reset command buffer
 	else if (cmdType == 0x01) {
 		console->info("GP1 clear command buffer");
-		gp0_fifoBuffer.clear();
+		fifoBuffer.clear();
 		//	TODO:	do we need to do more to cancel the current rendering command?
 	}
 
@@ -326,7 +349,14 @@ word GPU::readGPUSTAT() {
 
 word GPU::readGPUREAD() {
 	console->info("read GPUREAD");
-	//	TODO:	Map everything here
-	//	Receive responses to GP0(C0h) and GP1(10h) commands
-	return 0x00;
+
+	//	GP0 (c0h) - transferring data for "Copy rectangle (VRAM to CPU)"
+	if (gpustat.flags.ready_to_send_vram_to_cpu == READY_STATE::ready) {
+		return copy_rectangle_vram_to_cpu::read();
+	}
+
+	//	GP1 (10h) - transffering data for "Get GPU info"
+	//	todo
+
+	return 0x0000'0000;
 }

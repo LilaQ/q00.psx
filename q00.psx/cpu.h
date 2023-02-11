@@ -94,6 +94,7 @@ namespace R3000A {
 	u32 readCOPReg(u8 cop_id, u8 reg_id);
 
 	struct Registers {
+
 		u32 r[32] = { 0x00 };
 
 		const int gp = 28;

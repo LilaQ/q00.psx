@@ -1,4 +1,5 @@
 #include "dma.h"
+#include "mmu.h"
 
 namespace DMA {
 
@@ -67,19 +68,27 @@ namespace DMA {
 	};
 	static_assert(sizeof(DMA_Block_Control) == sizeof(u32), "Union not at the expected size!");
 
+
+	//	DMA channel control
+	enum class TRANSFER_DIRECTION : u32 { to_main_ram = 0, from_main_ram = 1 };
+	enum class MEMORY_ADDRESS_STEP : u32 { forward_plus_4 = 0, backward_minus_4 = 1 };
+	enum class CHOPPING : u32 { normal = 0, chopping = 1 };
+	enum class SYNC_MODE : u32 { start_immediately_transfer_all_at_once = 0, sync_blocks_to_dma_requests = 1, linked_list_mode = 2, reserved = 3 };
+	enum class START_BUSY : u32 { stopped_completed = 0, busy = 1 };
+
 	union DMA_Channel_Control {
 		struct {
-			u32 transfer_direction : 1;
-			u32 memory_address_step : 1;
+			TRANSFER_DIRECTION transfer_direction : 1;
+			MEMORY_ADDRESS_STEP memory_address_step : 1;
 			u32 : 6;
-			u32 chopping_enable : 1;
-			u32 sync_mode : 2;
+			CHOPPING chopping_enable : 1;
+			SYNC_MODE sync_mode : 2;
 			u32 : 5;
 			u32 chopping_dma_window_size : 3;
 			u32 : 1;
 			u32 chopping_cpu_window_size : 3;
 			u32 : 1;
-			u32 start_busy : 1;
+			START_BUSY start_busy : 1;
 			u32 : 3;
 			u32 start_trigger : 1;
 			u32 : 3;
@@ -104,7 +113,33 @@ namespace DMA {
 
 	void DMA::writeDMAChannelControl(u32 data, u8 channel) {
 		console->info("Setting DMA (channel {0:x}) channel control 0x{1:x}", channel, data);
-		dma_channel_control[channel].raw = data;
+
+		if (channel == 6) {
+			dma_channel_control[channel].raw = (data & 0x5100'0000) | 0b10;
+		}
+		else {
+			dma_channel_control[channel].raw = data;
+		}
+
+		//	dma started
+		if (dma_channel_control[channel].flags.start_trigger == 1 || dma_channel_control[channel].flags.start_busy == START_BUSY::busy) {
+			console->info("DMA started on channel {0:x}", channel);
+
+			switch (channel) {
+
+				//	DMA6 - OTC
+				case 6:
+					//	control bits
+					if (dma_channel_control[channel].raw == 0x1100'0002) {
+						Memory::initEmptyOrderingTable(dma_base_address[channel], dma_block_control[channel].syncmode_0.number_of_word);
+						dma_channel_control[channel].flags.start_busy = START_BUSY::stopped_completed;
+					}
+				break;
+			}
+
+			dma_channel_control[channel].flags.start_trigger = 0;
+		}
+
 	}
 
 	void DMA::writeDMAControlRegister(u32 data) {
@@ -130,5 +165,15 @@ namespace DMA {
 	u32 DMA::readDMAInterruptRegister() {
 		console->info("Reading DMA interrupt register");
 		return dma_interrupt_register.raw;
+	}
+
+	u32 DMA::readDMABaseAddress(u8 channel) {
+		console->info("Reading DMA (channel {0:x}) base address", channel);
+		return dma_base_address[channel];
+	}
+
+	u32 DMA::readDMAChannelControl(u8 channel) {
+		console->info("Reading DMA (channel {0:x}) channel control", channel);
+		return dma_channel_control[channel].raw;
 	}
 }

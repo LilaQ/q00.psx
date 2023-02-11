@@ -1,5 +1,6 @@
 #include "mmu.h"
 #include "cpu.h"
+#include "ui.h"
 #include <stdint.h>
 #include <sstream>
 #include <stdio.h>
@@ -113,6 +114,7 @@ void Opcode_JR(byte rs) {
 	else {
 		//	TODO:	Address Error Exception
 		console->error("JR - Address Error Exception");
+		UI::draw();
 		exit(1);
 	}
 	console->debug("JR {0:s} [{1:08x}]", REG(rs), target);
@@ -121,12 +123,14 @@ void Opcode_JR(byte rs) {
 void Opcode_JAL(u32 target) {
 	word tAddr = (CPU::registers.next_pc & 0xf000'0000) | (target << 2);
 	CPU::registers.r[registers.ra] = CPU::registers.next_pc;
+	CPU::registers.r[0] = 0;
 	CPU::registers.next_pc = tAddr;
 	console->debug("JAL {0:08x} [{1:08x}]", target, tAddr);
 }
 
 void Opcode_JALR(byte rd, byte rs) {
 	CPU::registers.r[rd] = CPU::registers.next_pc;
+	CPU::registers.r[0] = 0;
 	CPU::registers.next_pc = CPU::registers.r[rs];
 	console->debug("JAL {0:s}, {1:s} [{1:08x}]", REG(rd), REG(rs), CPU::registers.r[rs]);
 }
@@ -187,6 +191,7 @@ void Opcode_BcondZ(byte branchType, byte rs, i16 offset) {
 		case 0x10: {
 			word tAddr = CPU::registers.pc + (SIGN_EXT32(offset) << 2);
 			CPU::registers.r[registers.ra] = CPU::registers.next_pc;
+			CPU::registers.r[0] = 0;
 			if ((i32)CPU::registers.r[rs] < 0) {
 				CPU::registers.next_pc = tAddr;
 			}
@@ -197,6 +202,7 @@ void Opcode_BcondZ(byte branchType, byte rs, i16 offset) {
 		case 0x11: {
 			word tAddr = CPU::registers.pc + (SIGN_EXT32(offset) << 2);
 			CPU::registers.r[registers.ra] = CPU::registers.next_pc;
+			CPU::registers.r[0] = 0;
 			if ((i32)CPU::registers.r[rs] >= 0) {
 				CPU::registers.next_pc = tAddr;
 			}
@@ -210,18 +216,21 @@ void Opcode_LUI(byte rt, u16 imm) {
 	console->debug("LUI {0:s}, ${1:04x}", REG(rt), imm);
 	word s = imm << 16;
 	CPU::registers.r[rt] = s;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_LB(byte rt, i16 offset, byte base) {
 	console->debug("LB {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
 	CPU::registers.r[rt] = SIGN_EXT_BYTE_TO_WORD(Memory::fetch<byte>(vAddr));
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_LBU(byte base, byte rt, i16 offset) {
 	console->debug("LBU {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
 	CPU::registers.r[rt] = Memory::fetch<byte>(vAddr);
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SB(byte rt, i16 offset, byte base) {
@@ -234,12 +243,14 @@ void Opcode_LH(byte rt, i16 offset, byte base) {
 	console->debug("LH {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
 	CPU::registers.r[rt] = SIGN_EXT_HWORD_TO_WORD(Memory::fetch<hword>(vAddr));
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_LHU(byte rt, i16 offset, byte base) {
 	console->debug("LHU {0:s}, ${1:04x} ({2:s})", REG(rt), offset, REG(base));
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
 	CPU::registers.r[rt] = Memory::fetch<hword>(vAddr);
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SH(byte rt, i16 offset, byte base) {
@@ -252,6 +263,7 @@ void Opcode_LW(byte base, byte rt, i16 offset) {
 	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
 	console->debug("LW {0:s}, ${1:04x} ({2:s}) [{3:08x}] @ vAddr: {4:08x}", REG(rt), offset, REG(base), Memory::fetch<word>(vAddr), vAddr);
 	CPU::registers.r[rt] = Memory::fetch<word>(vAddr);
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_LWL(byte rt, i16 offset, byte base) {
@@ -264,6 +276,7 @@ void Opcode_LWL(byte rt, i16 offset, byte base) {
 	word lo = CPU::registers.r[rt] & (0xff'ffff >> shift);
 
 	CPU::registers.r[rt] = hi | lo;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_LWR(byte rt, i16 offset, byte base) {
@@ -275,6 +288,7 @@ void Opcode_LWR(byte rt, i16 offset, byte base) {
 	word lo = CPU::registers.r[rt] & ((u64)0xffff'ffff << (32 - shift));
 
 	CPU::registers.r[rt] = hi | lo;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SWL(byte rt, i16 offset, byte base) {
@@ -293,46 +307,53 @@ void Opcode_SWR(byte rt, i16 offset, byte base) {
 	Memory::store<word>(vAddr, (CPU::registers.r[rt] << shift) | content);
 }
 
+void Opcode_SW(byte base, byte rt, i16 offset) {
+	console->debug("SW {0:s}, ${1:x} ({2:04x}) [{3:08x}]", REG(rt), offset, base, CPU::registers.r[rt]);
+	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
+	Memory::store<word>(vAddr, CPU::registers.r[rt]);
+}
+
 
 void Opcode_ANDI(byte rt, byte rs, u16 imm) {
 	console->debug("ANDI {0:s}, {1:s}, ${2:04x}", REG(rt), REG(rs), imm);
 	CPU::registers.r[rt] = CPU::registers.r[rs] & imm;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_ORI(byte rt, byte rs, u16 imm) {
 	console->debug("ORI {0:s}, {1:s}, ${2:04x}", REG(rt), REG(rs), imm);
 	CPU::registers.r[rt] = CPU::registers.r[rs] | imm;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_AND(byte rd, byte rs, byte rt) {
 	console->debug("AND {0:s}, {1:s}, ${2:s}", REG(rd), REG(rs), REG(rt));
 	CPU::registers.r[rd] = CPU::registers.r[rt] & CPU::registers.r[rs];
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_NOR(byte rd, byte rs, byte rt) {
 	console->debug("NOR {0:s}, {1:s}, ${2:s}", REG(rd), REG(rs), REG(rt));
 	CPU::registers.r[rd] = ~(CPU::registers.r[rt] | CPU::registers.r[rs]);
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_OR(byte rd, byte rs, byte rt) {
 	console->debug("OR {0:s}, {1:s}, ${2:s}", REG(rd), REG(rs), REG(rt));
 	CPU::registers.r[rd] = CPU::registers.r[rt] | CPU::registers.r[rs];
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_XOR(byte rd, byte rs, byte rt) {
 	console->debug("XOR {0:s}, {1:s}, ${2:s}", REG(rd), REG(rs), REG(rt));
 	CPU::registers.r[rd] = CPU::registers.r[rt] ^ CPU::registers.r[rs];
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_XORI(byte rt, byte rs, u16 imm) {
 	console->debug("XORI {0:s}, {1:s}, ${2:04x}", REG(rt), REG(rs), imm);
 	CPU::registers.r[rt] = CPU::registers.r[rt] ^ imm;
-}
-
-void Opcode_SW(byte base, byte rt, i16 offset) {
-	console->debug("SW {0:s}, ${1:x} ({2:04x}) [{3:08x}]", REG(rt), offset, base, CPU::registers.r[rt]);
-	word vAddr = SIGN_EXT32(offset) + CPU::registers.r[base];
-	Memory::store<word>(vAddr, CPU::registers.r[rt]);
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_ADD(byte rd, byte rs, byte rt) {
@@ -342,22 +363,26 @@ void Opcode_ADD(byte rd, byte rs, byte rt) {
 	}
 	else {
 		CPU::registers.r[rd] = CPU::registers.r[rt] + CPU::registers.r[rs];
+		CPU::registers.r[0] = 0;
 	}
 }
 
 void Opcode_ADDI(byte rt, byte rs, i16 imm) {
 	console->debug("ADDI {0:s}, {1:s}, ${2:04x}", REG(rt), REG(rs), imm);
 	CPU::registers.r[rt] = CPU::registers.r[rs] + SIGN_EXT32(imm);
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_ADDU(byte rs, byte rt, byte rd) {
 	console->debug("ADDU {0:s}, {1:s}, ${2:s}", REG(rd), REG(rs), REG(rt));
 	CPU::registers.r[rd] = CPU::registers.r[rt] + CPU::registers.r[rs];
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_ADDIU(byte rt, byte rs, i16 imm) {
 	console->debug("ADDIU {0:s}, {1:s}, ${2:04x}", REG(rt), REG(rs), imm);
 	CPU::registers.r[rt] = SIGN_EXT32(imm) + CPU::registers.r[rs];
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_DIV(byte rs, byte rt) {
@@ -390,21 +415,25 @@ void Opcode_SUB(byte rd, byte rs, byte rt) {
 	console->debug("SUB {0:s}, {1:s}, {2:s}", REG(rd), REG(rs), REG(rt));
 	//	TODO:	Integer Overflow Exception
 	CPU::registers.r[rd] = CPU::registers.r[rs] - CPU::registers.r[rt];
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SUBU(byte rd, byte rs, byte rt) {
 	console->debug("SUBU {0:s}, {1:s}, {2:s}", REG(rd), REG(rs), REG(rt));
 	CPU::registers.r[rd] = CPU::registers.r[rs] - CPU::registers.r[rt];
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_MFLO(byte rd) {
 	console->debug("MFLO {0:s}", REG(rd));
 	CPU::registers.r[rd] = CPU::registers.lo;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_MFHI(byte rd) {
 	console->debug("MFHI {0:s}", REG(rd));
 	CPU::registers.r[rd] = CPU::registers.hi;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_MTLO(byte rs) {
@@ -420,51 +449,61 @@ void Opcode_MTHI(byte rs) {
 void Opcode_SLL(byte rd, byte rt, byte sa) {
 	console->debug("SLL {0:s}, {1:s}, ${2:04x}", REG(rd), REG(rt), sa);
 	CPU::registers.r[rd] = CPU::registers.r[rt] << sa;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SLLV(byte rd, byte rt, byte rs) {
 	console->debug("SLLV {0:s}, {1:s}, ${2:s}", REG(rd), REG(rt), REG(rs));
 	CPU::registers.r[rd] = CPU::registers.r[rt] << (CPU::registers.r[rs] & 0x1f);
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SRA(byte rd, byte rt, byte sa) {
 	console->debug("SRA {0:s}, {1:s}, ${2:04x}", REG(rd), REG(rt), sa);
 	CPU::registers.r[rd] = (i32)CPU::registers.r[rt] >> sa;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SRAV(byte rd, byte rt, byte rs) {
 	console->debug("SRAV {0:s}, {1:s}, ${2:s}", REG(rd), REG(rt), REG(rs));
 	CPU::registers.r[rd] = (i32)CPU::registers.r[rt] >> (CPU::registers.r[rs] & 0x1f);
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SRL(byte rd, byte rt, byte sa) {
 	console->debug("SRL {0:s}, {1:s}, ${2:04x}", REG(rd), REG(rt), sa);
 	CPU::registers.r[rd] = CPU::registers.r[rt] >> sa;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SRLV(byte rd, byte rt, byte rs) {
 	console->debug("SRLV {0:s}, {1:s}, ${2:s}", REG(rd), REG(rt), REG(rs));
 	CPU::registers.r[rd] = CPU::registers.r[rt] >> (CPU::registers.r[rs] & 0x1f);
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SLT(byte rd, byte rs, byte rt) {
 	console->debug("SLT {0:s}, {1:s}, ${2:s}", REG(rd), REG(rt), REG(rs));
 	CPU::registers.r[rd] = ((i32)CPU::registers.r[rt] > (i32)CPU::registers.r[rs]) ? 1 : 0;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SLTU(byte rd, byte rs, byte rt) {
 	console->debug("SLTU {0:s}, {1:s}, ${2:s}", REG(rd), REG(rt), REG(rs));
 	CPU::registers.r[rd] = (CPU::registers.r[rt] > CPU::registers.r[rs]) ? 1 : 0;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SLTI(byte rt, byte rs, i16 imm) {
 	console->debug("SLTI {0:s}, {1:s}, ${2:04x}", REG(rt), REG(rs), imm);
 	CPU::registers.r[rt] = ((i32)CPU::registers.r[rs] < SIGN_EXT16_TO_32(imm)) ? 1 : 0;
+	CPU::registers.r[0] = 0;
 }
 
 void Opcode_SLTIU(byte rt, byte rs, i16 imm) {
 	console->debug("SLTIU {0:s}, {1:s}, ${2:04x}", REG(rt), REG(rs), imm);
 	CPU::registers.r[rt] = (CPU::registers.r[rs] < (u32)SIGN_EXT16_TO_32(imm)) ? 1 : 0;
+	CPU::registers.r[0] = 0;
 }
 
 
@@ -478,6 +517,7 @@ void COP_Opcode_MTC(byte rt, byte rd, byte cop) {
 void COP_Opcode_MFC(byte rt, byte rd, byte cop) {
 	console->debug("MFC{0:d} {1:s}, {2:s}", cop, REG(rt), REG(rd));
 	CPU::registers.r[rt] = CPU::readCOPReg(cop, rd);
+	CPU::registers.r[0] = 0;
 }
 
 void COP_Opcode_SYSCALL() {

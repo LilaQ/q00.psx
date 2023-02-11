@@ -25,6 +25,19 @@ void Memory::init() {
 	memConsole->info("Memory init");
 }
 
+//	used by GPU DMA6 (OTC) to create an empty linked list for depth ordering
+void Memory::initEmptyOrderingTable(word base_address, word number_of_words) {
+	memConsole->info("initialising empty OT");
+	for (int i = 0; i < number_of_words; i++) {
+		if (i == (number_of_words - 1)) {
+			storeToMemory(base_address - i * 0x4, 0x00ff'ffff);
+		}
+		else {
+			storeToMemory(base_address - i * 0x4, base_address - (i + 1) * 0x4);
+		}
+	}
+}
+
 void Memory::loadToRAM(word targetAddress, byte* source, word offset, word size) {
 	memcpy(&memory[MASKED_ADDRESS(targetAddress)], &source[offset], sizeof(byte) * size);
 	memConsole->info("Done loading to RAM");
