@@ -117,9 +117,9 @@ void GPU::draw() {
 		GPU::lastUpdateTime = SDL_GetTicks();
 
 		// event handling
-		/*SDL_Event e;
+		SDL_Event e;
 		if (SDL_PollEvent(&e)) {
-		}*/
+		}
 
 		SDL_UpdateTexture(GPU::img, NULL, GPU::vram, VRAM_ROW_LENGTH * sizeof(u16));
 
@@ -241,9 +241,25 @@ void GPU::sendCommandGP0(word cmd) {
 		console->info("GP0 Render Lines");
 		fifoBuffer.clear();
 	}
+
+	else if (cmdType == 0x60 && fifoBuffer.size() >= 3) {
+		console->info("GP0 monochrome rectangle (variable size) (opaque)");
+		u32 rgb = fifoBuffer[0] & 0xff'ffff;
+		u32 yPos = fifoBuffer[1] >> 16;
+		u32 xPos = fifoBuffer[1] & 0xffff;
+		u32 ySiz = fifoBuffer[2] >> 16;
+		u32 xSiz = fifoBuffer[2] & 0xffff;
+		for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
+			for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
+				vram[yS * VRAM_ROW_LENGTH + xS] = rgb;
+			}
+		}
+		fifoBuffer.clear();
+	}
+
 	else if (cmdType >= 0x60 && cmdType < 0x80) {
 		console->info("GP0 Render Rectangles");
-		fifoBuffer.clear();
+		//fifoBuffer.clear();
 	}
 
 	//	Draw mode settings
@@ -265,7 +281,8 @@ void GPU::sendCommandGP0(word cmd) {
 
 	//	Unhandled
 	else {
-		console->error("Unhandled GP0 ({0:x})", cmdType);
+		console->error("Unhandled GP0 ({0:x}h) - fifoBuffer size: {1:x}", cmdType, fifoBuffer.size());
+		//exit(1);
 	}
 }
 

@@ -3,6 +3,8 @@
 #include "mmu.h"
 #include "gpu.h"
 #include "spu.h"
+#include "dma.h"
+#include "timer.h"
 #include "ui.h"
 #include "fileimport.h"
 #include "include/spdlog/spdlog.h"
@@ -25,7 +27,7 @@ int main(int argc, char* argv[]) {
     Memory::init();
     GPU::init();
     SPU::init();
-    UI::init();
+    //UI::init();
     
     // FileImport::loadEXE("CPUADD.exe"); // - PASSED
     // FileImport::loadEXE("CPUADDI.exe"); // - PASSED
@@ -36,7 +38,9 @@ int main(int argc, char* argv[]) {
     // FileImport::loadEXE("CPUDIV.exe"); // - PASSED
     // FileImport::loadEXE("CPUDIVU.exe"); // - PASSED
     // FileImport::loadEXE("CPULB.exe"); //  - PASSED
-    // FileImport::loadEXE("CPULH.exe"); //  - PASSED
+    //FileImport::loadEXE("CPULH.exe"); //  - PASSED
+    // 
+    // 
     // FileImport::loadEXE("CPULW.exe"); // - PASSED
     // FileImport::loadEXE("CPUMULT.exe"); // - PASSED
     // FileImport::loadEXE("CPUMULTU.exe"); // - PASSED
@@ -59,12 +63,14 @@ int main(int argc, char* argv[]) {
 
     while (1) {
         R3000A::step();
+        DMA::tick();
+        Timer::tick();
 
         //  only execute every 1/60th of a second
         if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch() - t_start.time_since_epoch()).count() > 16.67) {
             t_start = std::chrono::high_resolution_clock::now();
             GPU::draw();
-            UI::draw();
+            //UI::draw();
         }
     }
 

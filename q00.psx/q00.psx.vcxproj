@@ -157,6 +157,7 @@
     <ClCompile Include="mmu.cpp" />
     <ClCompile Include="q00.psx.cpp" />
     <ClCompile Include="spu.cpp" />
+    <ClCompile Include="timer.cpp" />
     <ClCompile Include="ui.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
@@ -173,6 +174,7 @@
     <ClInclude Include="include\imgui-1.89.2\imstb_textedit.h" />
     <ClInclude Include="include\imgui-1.89.2\imstb_truetype.h" />
     <ClInclude Include="spu.h" />
+    <ClInclude Include="timer.h" />
     <ClInclude Include="ui.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>

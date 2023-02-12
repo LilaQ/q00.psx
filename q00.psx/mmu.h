@@ -6,6 +6,7 @@
 #include "cpu.h"
 #include "spu.h"
 #include "dma.h"
+#include "timer.h"
 #include "include/spdlog/spdlog.h"
 #include "include/spdlog/sinks/stdout_color_sinks.h"
 #define MASKED_ADDRESS(a) (a & 0x1fff'ffff)
@@ -555,8 +556,28 @@ namespace Memory {
 
 			//	Timers
 			else if (address >= 0x1f80'1100 && address < 0x1f80'1128) {
-				memConsole->error("Implement timers, bitch! {0:x}", address);
-				exit(1);
+				u8 counter = (address % 0x1f80'1100) >> 4;
+
+				//	Current counter 
+				if ((address & 0b1111) == 0) {
+					return Timer::readCurrentCounter(counter);
+				}
+
+				//	Counter mode
+				else if ((address & 0b1111) == 4) {
+					return Timer::readCounterMode(counter);
+				}
+
+				//	Counter targer
+				else if ((address & 0b1111) == 8) {
+					return Timer::readCounterTarget(counter);
+				}
+
+				//	Unhandled reads in timer zone
+				else {
+					memConsole->error("Implement timers, bitch! {0:x}", address);
+					exit(1);
+				}
 			}
 
 			//	all other reads
@@ -598,6 +619,10 @@ namespace Memory {
 	template <typename T>
 	void store(word address, T data) {
 		address = MASKED_ADDRESS(address);
+
+		if (address == 0xea884) {
+			printf("eat shit");
+		}
 
 		//	RAM
 		if (address < 0x1f00'0000) {
@@ -839,8 +864,6 @@ namespace Memory {
 			storeToMemory<T>(address, data);
 		}
 	}
-
-	void initEmptyOrderingTable(word base_address, word number_of_words);
 
 	void loadToRAM(word, byte*, word, word);
 	void loadBIOS(byte* source, word size);

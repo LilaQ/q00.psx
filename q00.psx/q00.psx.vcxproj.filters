@@ -69,6 +69,9 @@
     <ClCompile Include="dma.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
+    <ClCompile Include="timer.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="gpu.h">
@@ -111,6 +114,9 @@
       <Filter>Headerdateien\imgui</Filter>
     </ClInclude>
     <ClInclude Include="dma.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="timer.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
   </ItemGroup>

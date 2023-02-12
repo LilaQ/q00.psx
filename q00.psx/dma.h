@@ -19,6 +19,8 @@ namespace DMA {
 	u32 readDMAInterruptRegister();
 	u32 readDMABaseAddress(u8 channel);
 	u32 readDMAChannelControl(u8 channel);
+
+	void tick();
 }
 
 #endif
