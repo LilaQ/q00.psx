@@ -37,5 +37,5 @@ void Memory::loadBIOS(byte* source, word size) {
 
 
 void Memory::dumpRAM() {
-	FileImport::saveFile("ramDump.txt", memory, 0x200'000);
+	FileImport::saveFile("ramDump", memory, 0x200'000);
 }

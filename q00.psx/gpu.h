@@ -2,8 +2,13 @@
 #ifndef GPU_GUARD
 #define GPU_GUARD
 #include "defs.h"
+#include <vector>
 
 namespace GPU {
+
+	struct Vertex {
+		u16 x, y;
+	};
 
 	void init();
 

@@ -5,11 +5,11 @@ namespace DMA {
 
 	std::shared_ptr<spdlog::logger> console = spdlog::stdout_color_mt("DMA");
 
-	u32 dma2_target_clks = 0;	//	approx value of clk cycles necessary for the inited dma
+	u32 dma2_target_words = 0;	//	approx value of clk cycles necessary for the inited dma
 	u32 dma2_clk_count = 0;
 
 	u32 dma6_target_clks = 0;	//	approx value of clk cycles necessary for the inited dma
-	u32 dma6_clk_count = 0;
+	u32 dma6_word_count = 0;
 
 	union DMA_Control_Register {
 		struct {
@@ -138,15 +138,18 @@ namespace DMA {
 				//	control bits 0x0100'0200 (VramRead), 0x0100'0201 (VramWrite), 0x0100'0401 (List)
 				if (dma_channel_control[2].raw == 0x0100'0200 || dma_channel_control[2].raw == 0x0100'0201 || dma_channel_control[2].raw == 0x0100'0401) {
 					dma2_clk_count = 0;
-					dma2_target_clks = dma_block_control[2].syncmode_1.blocksize * dma_block_control[2].syncmode_1.amount_of_blocks / 100 * 110;
+					dma2_target_words = dma_block_control[2].syncmode_1.blocksize * dma_block_control[2].syncmode_1.amount_of_blocks;
+					
+					u32 start_value = Memory::readFromMemory<u32>(dma_base_address[2]);
+					console->info("DMA2 started, v={0:08x} @ {1:08x}, count={2:x}, endnode={3:s}", start_value, dma_base_address[2], dma2_target_words, (start_value & 0x80'0000) ? "yes" : "no");
 				}
 
 				//	DMA6 - OTC
 				case 6:
 					//	control bits
 					if (dma_channel_control[6].raw == 0x1100'0002) {
-						dma6_clk_count = 0;
-						dma6_target_clks = dma_block_control[6].syncmode_0.number_of_word / 100 * 110;
+						dma6_word_count = 0;
+						dma6_target_clks = dma_block_control[6].syncmode_0.number_of_word;
 					}
 				break;
 			}
@@ -204,7 +207,6 @@ void DMA::tick() {
 		if (dma_channel_control[2].flags.sync_mode == SYNC_MODE::linked_list_mode) {
 			word val = Memory::readFromMemory<word>(dma_base_address[2]);
 			u8 wordCount = val >> 24;
-
 			const bool forward = dma_channel_control[2].flags.memory_address_step == MEMORY_ADDRESS_STEP::backward_minus_4;
 			for (int i = 1; i <= wordCount; i++) {
 				word command = 0;
@@ -214,7 +216,7 @@ void DMA::tick() {
 				else {
 					command = Memory::readFromMemory<word>(dma_base_address[2] + i * 0x4);
 				}
-				console->info("Sending GP0 command {0:x}", command);
+				console->info("DMA2 - Sending GP0 command {0:x}", command);
 				GPU::sendCommandGP0(command);
 			}
 			dma_base_address[2] = val & 0xff'ffff;
@@ -270,17 +272,27 @@ void DMA::tick() {
 
 	//	DMA6 OTC
 	if (dma_channel_control[6].flags.start_busy == START_BUSY::busy) {
-		//	debug, delete
-		dma_channel_control[6].flags.start_busy = START_BUSY::stopped_completed;
-		if (dma6_clk_count == (dma6_target_clks - 1)) {
-			Memory::storeToMemory(dma_base_address[6] - dma6_clk_count * 0x4, 0x00ff'ffff);
+		const bool forward = dma_channel_control[6].flags.memory_address_step == MEMORY_ADDRESS_STEP::backward_minus_4;
+		if (dma6_word_count == dma6_target_clks) {
+			if (forward) {
+				Memory::storeToMemory(dma_base_address[6] - dma6_word_count * 0x4, 0x00ff'ffff);
+				console->info("Completed DMA6 last write at {0:x} val {1:x}", dma_base_address[6] - dma6_word_count * 0x4, 0x00ff'ffff);
+			}
+			else {
+				Memory::storeToMemory(dma_base_address[6] + dma6_word_count * 0x4, 0x00ff'ffff);
+				console->info("Completed DMA6 last write at {0:x} val {1:x}", dma_base_address[6] + dma6_word_count * 0x4, 0x00ff'ffff);
+			}
 			dma_channel_control[6].flags.start_busy = START_BUSY::stopped_completed;
-			console->info("Completed DMA6");
-			spdlog::set_level(spdlog::level::debug);
+			
 		}
 		else {
-			Memory::storeToMemory(dma_base_address[6] - dma6_clk_count * 0x4, (dma_base_address[6] - (dma6_clk_count + 1) * 0x4) & 0xff'ffff);
+			if (forward) {
+				Memory::storeToMemory(dma_base_address[6] - dma6_word_count * 0x4, (dma_base_address[6] - (dma6_word_count + 1) * 0x4) & 0xff'ffff);
+			}
+			else {
+				Memory::storeToMemory(dma_base_address[6] + dma6_word_count * 0x4, (dma_base_address[6] + (dma6_word_count + 1) * 0x4) & 0xff'ffff);
+			}
 		}
-		dma6_clk_count++;
+		dma6_word_count++;
 	}
 }

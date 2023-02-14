@@ -1,11 +1,14 @@
 #include "ui.h"
 #include "cpu.h"
+#include "mmu.h"
 #include "SDL.h"
 #include "imgui.h"
 #include "backends/imgui_impl_sdl.h"
 #include "backends/imgui_impl_sdlrenderer.h"
 #include <iostream>
 #include <stdio.h>
+#include "include/spdlog/spdlog.h"
+#include "include/spdlog/sinks/stdout_color_sinks.h"
 
 namespace UI {
 
@@ -82,6 +85,16 @@ namespace UI {
             }
             ImGui::EndMainMenuBar();
         }
+
+        //  dump ram
+        ImGui::Begin("dump ram", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+        if (ImGui::Button("Dump RAM")) {
+            Memory::dumpRAM();
+        }
+        if (ImGui::Button("Start logging")) {
+            spdlog::set_level(spdlog::level::debug);
+        }
+        ImGui::End();
 
         //  cpu regs
         ImGui::Begin("cpu regs", NULL, ImGuiWindowFlags_AlwaysAutoResize);

@@ -4,7 +4,7 @@
 #include <SDL.h>
 #include <deque>
 #define GPU_COMMAND_TYPE(a) (a >> 24) & 0xff
-#define GP1_PARAMETER(a) a & 0xff'ffff
+#define GPU_COMMAND_PARAMETER(a) a & 0xff'ffff
 #define RGB_8BIT_TO_5BIT(a) (a >> 3)
 #define VRAM_ROW_LENGTH 1024
 
@@ -92,6 +92,15 @@ namespace GPU {
 	SDL_Renderer* renderer = NULL;
 	SDL_Texture* img = NULL;
 	unsigned int lastUpdateTime = 0;
+
+	//	Rasterizing
+	u16 bresenham(u16, u16, u16, u16, u16);
+	void plot(u16, u16, u16);
+	void plotLine(u16 color, u16 x1, u16 x2, u16 y);
+	void drawPolygon(u16 color, std::vector<Vertex> vertices);
+	void drawTriangle(u16, std::vector<Vertex>);
+	void drawFlatTopTriangle(u16, std::vector<Vertex>);
+	void drawFlatBottomTriangle(u16, std::vector<Vertex>);
 }
 
 void GPU::init() {
@@ -106,31 +115,30 @@ void GPU::init() {
 
 void GPU::setupSDL() {
 	SDL_Init(SDL_INIT_VIDEO);
-	win = SDL_CreateWindow("q00.psx", 0, 78, 1024, 512, 0);
+	win = SDL_CreateWindow("q00.psx", 1500, 78, 1024, 512, 0);
 	renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
 	img = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR1555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
 }
 
 void GPU::draw() {
-	// paint the image once every 30ms, i.e. 33 images per second
-	if (GPU::lastUpdateTime + 60 < SDL_GetTicks()) {
-		GPU::lastUpdateTime = SDL_GetTicks();
 
-		// event handling
-		SDL_Event e;
-		if (SDL_PollEvent(&e)) {
-		}
+	//	debug
+	GPU::gpustat.flags.drawing_evenodd_lines_in_interlace_mode = (GPU::gpustat.flags.drawing_evenodd_lines_in_interlace_mode == EVEN_ODD::even_or_vblank) ? EVEN_ODD::odd : EVEN_ODD::even_or_vblank;
 
-		SDL_UpdateTexture(GPU::img, NULL, GPU::vram, VRAM_ROW_LENGTH * sizeof(u16));
-
-		// clear the screen
-		SDL_RenderClear(GPU::renderer);
-		// copy the texture to the rendering context
-		SDL_RenderCopy(renderer, img, NULL, NULL);
-		// flip the backbuffer
-		// this means that everything that we prepared behind the screens is actually shown
-		SDL_RenderPresent(GPU::renderer);
+	// event handling
+	SDL_Event e;
+	if (SDL_PollEvent(&e)) {
 	}
+
+	SDL_UpdateTexture(GPU::img, NULL, GPU::vram, VRAM_ROW_LENGTH * sizeof(u16));
+
+	// clear the screen
+	SDL_RenderClear(GPU::renderer);
+	// copy the texture to the rendering context
+	SDL_RenderCopy(renderer, img, NULL, NULL);
+	// flip the backbuffer
+	// this means that everything that we prepared behind the screens is actually shown
+	SDL_RenderPresent(GPU::renderer);
 }
 
 constexpr static u16 convertBGR24btoRGB16b(word bgr) {
@@ -150,9 +158,10 @@ void GPU::sendCommandGP0(word cmd) {
 	*/
 	fifoBuffer.push_back(cmd);
 
-	word currentCommand = fifoBuffer.front();
-	word cmdType = GPU_COMMAND_TYPE(currentCommand);
-	word cmdParameter = GP1_PARAMETER(currentCommand);
+	const word currentCommand = fifoBuffer.front();
+	const byte cmdType = GPU_COMMAND_TYPE(currentCommand);
+	const word cmdParameter = GPU_COMMAND_PARAMETER(currentCommand);
+	const u8 bufferSize = fifoBuffer.size();
 
 	//	TODO:
 	//	all these fifoBuffer clears are wrong, it should be pops (different amounts)
@@ -162,11 +171,11 @@ void GPU::sendCommandGP0(word cmd) {
 		console->info("GP0 Nop");
 		fifoBuffer.clear();
 	}
-	else if (cmdType == 0x01 && fifoBuffer.size() == 1) {
+	else if (cmdType == 0x01 && bufferSize == 1) {
 		console->info("GP0 (01h) Clear Cache");
 		fifoBuffer.clear();
 	}
-	else if (cmdType == 0x02 && fifoBuffer.size() == 3) {
+	else if (cmdType == 0x02 && bufferSize == 3) {
 		u16 rgb = convertBGR24btoRGB16b(0xffffff & fifoBuffer[0]);
 		u16 yPos = fifoBuffer[1] >> 16;
 		u16 xPos = fifoBuffer[1] & 0xffff * 0x10;
@@ -182,11 +191,11 @@ void GPU::sendCommandGP0(word cmd) {
 		console->info("GP0 (02h) Fill Rectangle in VRAM\nXpos: {0:x}h, Ypos: {1:x}h, Xsiz: {2:x}h, Ysiz: {3:x}h, RGB: {4:x}h", xPos, yPos, xSiz, ySiz, rgb);
 		fifoBuffer.clear();
 	}
-	else if (cmdType == 0x80 && fifoBuffer.size() == 4) {
+	else if (cmdType == 0x80 && bufferSize == 4) {
 		console->info("GP0 (80h) Copy Rectangle (VRAM to VRAM)\nXpos: {0:x}, Ypos: {1:x}, Xsiz: {2:x}");
 		fifoBuffer.clear();
 	}
-	else if (cmdType == 0xa0 && fifoBuffer.size() > 3 ) {
+	else if (cmdType == 0xa0 && bufferSize > 3 ) {
 		//	calculate if the data is done already, or if we are expecting more
 		//	data being sent to GPU via command
 		u16 yPos = fifoBuffer[1] >> 16;
@@ -194,9 +203,9 @@ void GPU::sendCommandGP0(word cmd) {
 		u16 ySiz = fifoBuffer[2] >> 16;
 		u16 xSiz = fifoBuffer[2] & 0xffff;
 		u16 expectedDataSize = xSiz * ySiz;
-		if ((fifoBuffer.size() - 3) * 2 == expectedDataSize) {
+		if ((bufferSize - 3) * 2 == expectedDataSize) {
 			std::vector<u16> data;
-			for (u16 row = 3; row < fifoBuffer.size(); row++) {
+			for (u16 row = 3; row < bufferSize; row++) {
 				data.push_back(fifoBuffer[row] & 0xffff);
 				data.push_back(fifoBuffer[row] >> 16);
 			}
@@ -209,10 +218,13 @@ void GPU::sendCommandGP0(word cmd) {
 			}
 			fifoBuffer.clear();
 		}
+		else {
+			printf("nope");
+		}
 	}
 
 	//	
-	else if (cmdType == 0xc0 && fifoBuffer.size() == 3) {
+	else if (cmdType == 0xc0 && bufferSize == 3) {
 		console->info("GP0 (c0h) Copy Rectangle (VRAM to CPU)");
 
 		//	get GPUREAD ready, so CPU can read from it
@@ -233,18 +245,34 @@ void GPU::sendCommandGP0(word cmd) {
 		console->info("GP0 Interrupt Request (IRQ1)");
 		fifoBuffer.clear();
 	}
-	else if (cmdType >= 0x20 && cmdType < 0x40) {
-		console->info("GP0 Render Polygons");
-		fifoBuffer.clear();
+	else if (cmdType >> 5 == 1) {
+		//	calc vertices / words in the buffer to be expected
+		u32 wordCount = 4;
+		wordCount += (cmdType & 0b1000) ? 1 : 0;	//	3 / 4 point polygon
+
+		if (bufferSize == wordCount) {
+			u16 rgb = convertBGR24btoRGB16b(fifoBuffer[0] & 0xff'ffff);
+			console->info("Drawing polygon, color = {0:x}, vertex count = {1:x}", rgb, wordCount);
+			std::vector<Vertex> verts;
+			for (int i = 0; i < wordCount - 1; i++) {
+				Vertex v;
+				v.x = fifoBuffer[i + 1] & 0xffff;
+				v.y = fifoBuffer[i + 1] >> 16;
+				verts.push_back(v);
+			}
+			drawPolygon(rgb, verts);
+			fifoBuffer.clear();
+		}
+		
 	}
 	else if (cmdType >= 0x40 && cmdType < 0x60) {
 		console->info("GP0 Render Lines");
 		fifoBuffer.clear();
 	}
 
-	else if (cmdType == 0x60 && fifoBuffer.size() >= 3) {
+	else if (cmdType == 0x60 && bufferSize >= 3) {
 		console->info("GP0 monochrome rectangle (variable size) (opaque)");
-		u32 rgb = fifoBuffer[0] & 0xff'ffff;
+		u16 rgb = convertBGR24btoRGB16b(fifoBuffer[0] & 0xff'ffff);
 		u32 yPos = fifoBuffer[1] >> 16;
 		u32 xPos = fifoBuffer[1] & 0xffff;
 		u32 ySiz = fifoBuffer[2] >> 16;
@@ -281,7 +309,7 @@ void GPU::sendCommandGP0(word cmd) {
 
 	//	Unhandled
 	else {
-		console->error("Unhandled GP0 ({0:x}h) - fifoBuffer size: {1:x}", cmdType, fifoBuffer.size());
+		console->error("Unhandled GP0 ({0:x}h) - fifoBuffer size: {1:x}", cmdType, bufferSize);
 		//exit(1);
 	}
 }
@@ -289,7 +317,7 @@ void GPU::sendCommandGP0(word cmd) {
 void GPU::sendCommandGP1(word cmd) {
 
 	word cmdType = GPU_COMMAND_TYPE(cmd);
-	word cmdParameter = GP1_PARAMETER(cmd);
+	word cmdParameter = GPU_COMMAND_PARAMETER(cmd);
 
 	//	Reset GPU
 	if (cmdType == 0x00) {
@@ -376,4 +404,127 @@ word GPU::readGPUREAD() {
 	//	todo
 
 	return 0x0000'0000;
+}
+
+
+
+//
+//	Rasterization
+
+u16 GPU::bresenham(u16 x0, u16 y0, u16 x1, u16 y1, u16 forY) {
+	//console->info("Bresenham, x0={0:x}, y0={1:x}, x1={2:x}, y1={3:x}, forY={4:x}", x0, y0, x1, y1, forY);
+	int dx, dy, err, e2, x, y, prex;
+	dx = abs(x1 - x0);
+	dy = -abs(y1 - y0);
+	x = x0 < x1 ? 1 : -1;
+	y = y0 < y1 ? 1 : -1;
+	err = dy + dx;
+	prex = x0;
+	while (1) {
+		if (x0 == x1 && y0 == y1) {
+			//console->info("Bresenham returning {0:x}", (x0 < x1) ? x0 : prex);
+			return (x0 < x1) ? x0 : prex;
+		}
+		e2 = 2 * err;
+		if (e2 >= dy) {
+			err += dy;
+			x0 += x;
+		}
+		if (e2 <= dx) {
+			err += dx;
+			if (y0 == forY) {
+				//console->info("Bresenham returning {0:x}", (x0 < x1) ? x0 : prex);
+				return (x0 < x1) ? x0 : prex;
+			}
+			y0 += y;
+			prex = x0;
+		}
+	}
+}
+
+void GPU::plot(u16 x, u16 y, u16 color) {
+	vram[y * VRAM_ROW_LENGTH + x] = color;
+}
+
+void GPU::plotLine(u16 color, u16 x1, u16 x2, u16 y) {
+	if (x1 < x2) {
+		for (; x1 <= x2; x1++) {
+			GPU::plot(x1, y, color);
+		}
+	}
+	else {
+		for (; x2 <= x1; x2++) {
+			GPU::plot(x2, y, color);
+		}
+	}
+}
+
+void GPU::drawFlatBottomTriangle(u16 color, std::vector<Vertex> v) {
+
+	/*
+				v0
+				/\
+	           /  \
+			  /    \
+	         /      \
+			/        \	
+			v1.......v2
+	*/
+
+	//console->info("Flat Bottom Triangle v0=({0:x}, {1:x}), v1=({2:x}, {3:x}), v2=({4:x}, {5:x})", v[0].x, v[0].y, v[1].x, v[1].y, v[2].x, v[2].y);
+	if (v[0].y == v[1].y && v[1].y == v[2].y) {
+		//console->info("Triangle is a line, ignoring");
+		return;
+	}
+	else {
+ 		for (int i = v[1].y; i >= v[0].y; i--) {
+			u16 left = bresenham(v[1].x, v[1].y, v[0].x, v[0].y, i);
+			u16 right = bresenham(v[0].x, v[0].y, v[2].x, v[2].y, i);
+			plotLine(color, left, right, i);
+		}
+	}
+}
+
+void GPU::drawFlatTopTriangle(u16 color, std::vector<Vertex> v) {
+
+	/*
+			v0.......v1
+			 \       /
+			  \     /
+			   \   /
+			    \ /
+				v2
+	*/
+
+	//console->info("Flat Top Triangle v0=({0:x}, {1:x}), v1=({2:x}, {3:x}), v2=({4:x}, {5:x})", v[0].x, v[0].y, v[1].x, v[1].y, v[2].x, v[2].y);
+	if (v[0].y == v[1].y && v[1].y == v[2].y) {
+		//console->info("Triangle is a line, ignoring");
+		return;
+	}
+	else {
+		for (int i = v[0].y; i <= v[2].y; i++) {
+			u16 left = bresenham(v[0].x, v[0].y, v[2].x, v[2].y, i);
+			u16 right = bresenham(v[2].x, v[2].y, v[1].x, v[1].y, i);
+			plotLine(color, left, right, i);
+		}
+	}
+}
+
+void GPU::drawTriangle(u16 color, std::vector<Vertex> vertices) {
+	//console->info("Triangle, may still need splitting v0=({0:x}, {1:x}), v1=({2:x}, {3:x}), v2=({4:x}, {5:x})", vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y);
+	
+	//	we need to split the triangle in 2 flatsided triangles
+	Vertex v4;
+	v4.x = (vertices[0].x + ((float)(vertices[1].y - vertices[0].y) / (float)(vertices[2].y - vertices[0].y)) * (vertices[2].x - vertices[0].x));
+	v4.y = vertices[1].y;
+	std::vector<Vertex> tri1 = { vertices[0], vertices[1], v4 };
+	std::vector<Vertex> tri2 = { vertices[1], v4, vertices[2]};
+	drawFlatBottomTriangle(color, tri1);
+	drawFlatTopTriangle(color, tri2);
+}
+
+void GPU::drawPolygon(u16 color, std::vector<Vertex> vertices) {
+	for (int i = 0; i < vertices.size() - 2; i++) {
+		drawTriangle(color, { vertices[i], vertices[i + 1], vertices[i + 2] });
+	}
 }

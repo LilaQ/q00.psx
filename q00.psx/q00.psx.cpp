@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
     Memory::init();
     GPU::init();
     SPU::init();
-    //UI::init();
+    UI::init();
     
     // FileImport::loadEXE("CPUADD.exe"); // - PASSED
     // FileImport::loadEXE("CPUADDI.exe"); // - PASSED
@@ -60,18 +60,18 @@ int main(int argc, char* argv[]) {
     // FileImport::loadEXE("CPUSUBU.exe"); // - PASSED
     // FileImport::loadEXE("CPUXOR.exe"); // - PASSED
     // FileImport::loadEXE("CPUXORI.exe"); // - PASSED
-
     while (1) {
         R3000A::step();
         DMA::tick();
         Timer::tick();
 
         //  only execute every 1/60th of a second
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch() - t_start.time_since_epoch()).count() > 16.67) {
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch() - t_start.time_since_epoch()).count() > 33.34) {
             t_start = std::chrono::high_resolution_clock::now();
             GPU::draw();
-            //UI::draw();
+            UI::draw();
         }
+
     }
 
 }

@@ -67,16 +67,15 @@ void FileImport::loadBIOS(const char filename[]) {
 }
 
 void FileImport::saveFile(const char filename[], u8* data, u32 dataSize) {
-	ofstream fout(filename);
+	ofstream fout(filename, std::ios::binary | std::ios::out);
 	if (fout.is_open()) {
-		for (int i = 0; i < dataSize; i++) {
-			fout << data[i];
-		}
+		fout.write((char*)data, dataSize);
 		cout << "Success!" << endl;
 	}
 	else {
 		cout << "File could not be opened." << endl;
 	}
+	fout.close();
 }
 
 FileImport::PSX_FILE FileImport::loadFile(const char filename[]) {
