@@ -161,7 +161,7 @@ void GPU::sendCommandGP0(word cmd) {
 	const word currentCommand = fifoBuffer.front();
 	const byte cmdType = GPU_COMMAND_TYPE(currentCommand);
 	const word cmdParameter = GPU_COMMAND_PARAMETER(currentCommand);
-	const u8 bufferSize = fifoBuffer.size();
+	const u32 bufferSize = fifoBuffer.size();
 
 	//	TODO:
 	//	all these fifoBuffer clears are wrong, it should be pops (different amounts)
@@ -195,47 +195,49 @@ void GPU::sendCommandGP0(word cmd) {
 		console->info("GP0 (80h) Copy Rectangle (VRAM to VRAM)\nXpos: {0:x}, Ypos: {1:x}, Xsiz: {2:x}");
 		fifoBuffer.clear();
 	}
-	else if (cmdType == 0xa0 && bufferSize > 3 ) {
-		//	calculate if the data is done already, or if we are expecting more
-		//	data being sent to GPU via command
-		u16 yPos = fifoBuffer[1] >> 16;
-		u16 xPos = fifoBuffer[1] & 0xffff;
-		u16 ySiz = fifoBuffer[2] >> 16;
-		u16 xSiz = fifoBuffer[2] & 0xffff;
-		u16 expectedDataSize = xSiz * ySiz;
-		if ((bufferSize - 3) * 2 == expectedDataSize) {
-			std::vector<u16> data;
-			for (u16 row = 3; row < bufferSize; row++) {
-				data.push_back(fifoBuffer[row] & 0xffff);
-				data.push_back(fifoBuffer[row] >> 16);
-			}
-			console->info("GP0 (a0h) Copy Rectangle (CPU to VRAM)");
-			int c = 0;
-			for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
-				for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
-					vram[yS * VRAM_ROW_LENGTH + xS] = data[c++];
+	else if (cmdType == 0xa0) {
+		if (bufferSize > 3) {
+			//	calculate if the data is done already, or if we are expecting more
+			//	data being sent to GPU via command
+			u16 yPos = fifoBuffer[1] >> 16;
+			u16 xPos = fifoBuffer[1] & 0xffff;
+			u16 ySiz = fifoBuffer[2] >> 16;
+			u16 xSiz = fifoBuffer[2] & 0xffff;
+			u16 expectedDataSize = xSiz * ySiz;
+			console->info("GP0 (a0h) Copy Rectangle (CPU to VRAM) - started. expecting={0:x}, available={1:x}", expectedDataSize, (bufferSize - 3) * 2);
+			if ((bufferSize - 3) * 2 == expectedDataSize) {
+				std::vector<u16> data;
+				for (u16 row = 3; row < bufferSize; row++) {
+					data.push_back(fifoBuffer[row] & 0xffff);
+					data.push_back(fifoBuffer[row] >> 16);
 				}
+				console->info("GP0 (a0h) Copy Rectangle (CPU to VRAM)");
+				int c = 0;
+				for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
+					for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
+						vram[yS * VRAM_ROW_LENGTH + xS] = data[c++];
+					}
+				}
+				fifoBuffer.clear();
 			}
-			fifoBuffer.clear();
-		}
-		else {
-			printf("nope");
 		}
 	}
 
 	//	
-	else if (cmdType == 0xc0 && bufferSize == 3) {
-		console->info("GP0 (c0h) Copy Rectangle (VRAM to CPU)");
+	else if (cmdType == 0xc0) {
+		if (bufferSize == 3) {
+			console->info("GP0 (c0h) Copy Rectangle (VRAM to CPU)");
 
-		//	get GPUREAD ready, so CPU can read from it
-		copy_rectangle_vram_to_cpu::pos = 0;
-		copy_rectangle_vram_to_cpu::yPos = fifoBuffer[1] >> 16;
-		copy_rectangle_vram_to_cpu::xPos = fifoBuffer[1] & 0xffff;
-		copy_rectangle_vram_to_cpu::ySiz = fifoBuffer[2] >> 16;
-		copy_rectangle_vram_to_cpu::xSiz = fifoBuffer[2] & 0xffff;
-		gpustat.flags.ready_to_send_vram_to_cpu = READY_STATE::ready;
+			//	get GPUREAD ready, so CPU can read from it
+			copy_rectangle_vram_to_cpu::pos = 0;
+			copy_rectangle_vram_to_cpu::yPos = fifoBuffer[1] >> 16;
+			copy_rectangle_vram_to_cpu::xPos = fifoBuffer[1] & 0xffff;
+			copy_rectangle_vram_to_cpu::ySiz = fifoBuffer[2] >> 16;
+			copy_rectangle_vram_to_cpu::xSiz = fifoBuffer[2] & 0xffff;
+			gpustat.flags.ready_to_send_vram_to_cpu = READY_STATE::ready;
 
-		fifoBuffer.clear();
+			fifoBuffer.clear();
+		}
 	}
 	else if (cmdType == 0x03) {
 		console->info("GP0 Unknown");
@@ -388,7 +390,7 @@ void GPU::sendCommandGP1(word cmd) {
 }
 
 word GPU::readGPUSTAT() {
-	console->info("read GPUSTAT");
+	//console->info("read GPUSTAT");
 	return gpustat.get();
 }
 
