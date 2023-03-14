@@ -5,12 +5,24 @@
 #include <deque>
 #define GPU_COMMAND_TYPE(a) (a >> 24) & 0xff
 #define GPU_COMMAND_PARAMETER(a) a & 0xff'ffff
-#define RGB_8BIT_TO_5BIT(a) (a >> 3)
 #define VRAM_ROW_LENGTH 1024
+#define RED(a) ((a >> 10) & 0b1'1111)
+#define GREEN(a) ((a >> 5) & 0b1'1111)
+#define BLUE(a) (a & 0b1'1111)
 
 static auto console = spdlog::stdout_color_mt("GPU");
 
 namespace GPU {
+
+	enum class GPU_STATE {
+		IDLE,
+		GPU_A0_PENDING,
+		GPU_C0_PENDING
+	};
+	GPU_STATE pending_gpu_state = GPU_STATE::IDLE;
+
+	//	pending command var
+	u32 a0_posx, a0_posy, a0_sizx, a0_sizy, a0_expected_words, a0_processed_words;
 
 	enum class SEMI_TRANSPARENCY : u32 { back_half_plus_front_half = 0, back_plus_front = 1, back_minus_front = 2, back_plus_front_quarter = 3 };
 	enum class TEXTURE_PAGE_COLORS : u32 { col_4b = 0, col_8b = 1, col_15b = 2, reserved = 3 };
@@ -94,13 +106,13 @@ namespace GPU {
 	unsigned int lastUpdateTime = 0;
 
 	//	Rasterizing
-	u16 bresenham(u16, u16, u16, u16, u16);
 	void plot(u16, u16, u16);
-	void plotLine(u16 color, u16 x1, u16 x2, u16 y);
-	void drawPolygon(u16 color, std::vector<Vertex> vertices);
-	void drawTriangle(u16, std::vector<Vertex>);
-	void drawFlatTopTriangle(u16, std::vector<Vertex>);
-	void drawFlatBottomTriangle(u16, std::vector<Vertex>);
+	void drawPolygon(std::vector<Vertex>& vertices, u16 color);
+	void drawPolygon(std::vector<Vertex>& vertices, std::vector<u16>& vert_colors);
+	void drawTriangle(std::vector<Vertex>& vertices, u16 color);
+	void drawTriangle(std::vector<Vertex>& vertices, std::vector<u16>& vert_colors);
+	float edge(Vertex a, Vertex b, Vertex c);
+	void barycentric(std::vector<Vertex>& vertices, std::vector<u16>& colors);
 }
 
 void GPU::init() {
@@ -117,7 +129,7 @@ void GPU::setupSDL() {
 	SDL_Init(SDL_INIT_VIDEO);
 	win = SDL_CreateWindow("q00.psx", 1500, 78, 1024, 512, 0);
 	renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
-	img = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR1555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
+	img = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
 }
 
 void GPU::draw() {
@@ -142,10 +154,13 @@ void GPU::draw() {
 }
 
 constexpr static u16 convertBGR24btoRGB16b(word bgr) {
+	u8 r = (bgr & 0xff) >> 3;
+	u8 g = ((bgr >> 8) & 0xff) >> 3;
+	u8 b = ((bgr >> 16) & 0xff) >> 3;
 	u16 rgb =
-		RGB_8BIT_TO_5BIT(bgr & 0xff) << 10 |
-		RGB_8BIT_TO_5BIT((bgr >> 8) & 0xff) << 5 |
-		RGB_8BIT_TO_5BIT(bgr >> 16);
+		(r << 10) |
+		(g << 5) |
+		(b);
 	return rgb;
 }
 
@@ -163,156 +178,176 @@ void GPU::sendCommandGP0(word cmd) {
 	const word cmdParameter = GPU_COMMAND_PARAMETER(currentCommand);
 	const u32 bufferSize = fifoBuffer.size();
 
-	//	TODO:
-	//	all these fifoBuffer clears are wrong, it should be pops (different amounts)
+	if (pending_gpu_state == GPU_STATE::IDLE) {
+		if (cmdType == 0x00) {
+			console->info("GP0 Nop");
+			fifoBuffer.clear();
+		}
+		else if (cmdType == 0x01) {
+			console->info("GP0 (01h) Clear Cache");
+			fifoBuffer.clear();
+		}
+		else if (cmdType == 0x02 && bufferSize == 3) {
+			u16 rgb = convertBGR24btoRGB16b(0xffffff & fifoBuffer[0]);
+			u16 yPos = fifoBuffer[1] >> 16;
+			u16 xPos = fifoBuffer[1] & 0xffff * 0x10;
+			u16 ySiz = fifoBuffer[2] >> 16;
+			u16 xSiz = fifoBuffer[2] & 0xffff * 0x10;
 
-	
-	if (cmdType == 0x00) {
-		console->info("GP0 Nop");
-		fifoBuffer.clear();
-	}
-	else if (cmdType == 0x01 && bufferSize == 1) {
-		console->info("GP0 (01h) Clear Cache");
-		fifoBuffer.clear();
-	}
-	else if (cmdType == 0x02 && bufferSize == 3) {
-		u16 rgb = convertBGR24btoRGB16b(0xffffff & fifoBuffer[0]);
-		u16 yPos = fifoBuffer[1] >> 16;
-		u16 xPos = fifoBuffer[1] & 0xffff * 0x10;
-		u16 ySiz = fifoBuffer[2] >> 16;
-		u16 xSiz = fifoBuffer[2] & 0xffff * 0x10;
+			for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
+				for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
+					vram[yS * VRAM_ROW_LENGTH + xS] = rgb;
+				}
+			}
 
-		for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
-			for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
-				vram[yS * VRAM_ROW_LENGTH + xS] = rgb;
+			console->info("GP0 (02h) Fill Rectangle in VRAM\nXpos: {0:x}h, Ypos: {1:x}h, Xsiz: {2:x}h, Ysiz: {3:x}h, RGB: {4:x}h", xPos, yPos, xSiz, ySiz, rgb);
+			fifoBuffer.clear();
+		}
+		else if (cmdType == 0x80 && bufferSize == 4) {
+			console->info("GP0 (80h) Copy Rectangle (VRAM to VRAM)\nXpos: {0:x}, Ypos: {1:x}, Xsiz: {2:x}");
+			fifoBuffer.clear();
+		}
+		else if (cmdType == 0xa0) {
+			if (bufferSize == 3) {
+				a0_posy = fifoBuffer[1] >> 16;
+				a0_posx = fifoBuffer[1] & 0xffff;
+				a0_sizy = fifoBuffer[2] >> 16;
+				a0_sizx = fifoBuffer[2] & 0xffff;
+				a0_expected_words = a0_sizx * a0_sizy;
+				a0_processed_words = 0;
+				pending_gpu_state = GPU_STATE::GPU_A0_PENDING;
+				console->info("GP0 (a0h) Copy Rectangle (CPU to VRAM) - started. expecting={0:x}, available={1:x}", a0_expected_words, a0_processed_words * 2);
 			}
 		}
 
-		console->info("GP0 (02h) Fill Rectangle in VRAM\nXpos: {0:x}h, Ypos: {1:x}h, Xsiz: {2:x}h, Ysiz: {3:x}h, RGB: {4:x}h", xPos, yPos, xSiz, ySiz, rgb);
-		fifoBuffer.clear();
-	}
-	else if (cmdType == 0x80 && bufferSize == 4) {
-		console->info("GP0 (80h) Copy Rectangle (VRAM to VRAM)\nXpos: {0:x}, Ypos: {1:x}, Xsiz: {2:x}");
-		fifoBuffer.clear();
-	}
-	else if (cmdType == 0xa0) {
-		if (bufferSize > 3) {
-			//	calculate if the data is done already, or if we are expecting more
-			//	data being sent to GPU via command
-			u16 yPos = fifoBuffer[1] >> 16;
-			u16 xPos = fifoBuffer[1] & 0xffff;
-			u16 ySiz = fifoBuffer[2] >> 16;
-			u16 xSiz = fifoBuffer[2] & 0xffff;
-			u16 expectedDataSize = xSiz * ySiz;
-			console->info("GP0 (a0h) Copy Rectangle (CPU to VRAM) - started. expecting={0:x}, available={1:x}", expectedDataSize, (bufferSize - 3) * 2);
-			if ((bufferSize - 3) * 2 == expectedDataSize) {
-				std::vector<u16> data;
-				for (u16 row = 3; row < bufferSize; row++) {
-					data.push_back(fifoBuffer[row] & 0xffff);
-					data.push_back(fifoBuffer[row] >> 16);
-				}
-				console->info("GP0 (a0h) Copy Rectangle (CPU to VRAM)");
-				int c = 0;
-				for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
-					for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
-						vram[yS * VRAM_ROW_LENGTH + xS] = data[c++];
-					}
-				}
+		//	
+		else if (cmdType == 0xc0) {
+			if (bufferSize == 3) {
+				console->info("GP0 (c0h) Copy Rectangle (VRAM to CPU)");
+
+				//	get GPUREAD ready, so CPU can read from it
+				copy_rectangle_vram_to_cpu::pos = 0;
+				copy_rectangle_vram_to_cpu::yPos = fifoBuffer[1] >> 16;
+				copy_rectangle_vram_to_cpu::xPos = fifoBuffer[1] & 0xffff;
+				copy_rectangle_vram_to_cpu::ySiz = fifoBuffer[2] >> 16;
+				copy_rectangle_vram_to_cpu::xSiz = fifoBuffer[2] & 0xffff;
+				gpustat.flags.ready_to_send_vram_to_cpu = READY_STATE::ready;
+
 				fifoBuffer.clear();
 			}
 		}
-	}
-
-	//	
-	else if (cmdType == 0xc0) {
-		if (bufferSize == 3) {
-			console->info("GP0 (c0h) Copy Rectangle (VRAM to CPU)");
-
-			//	get GPUREAD ready, so CPU can read from it
-			copy_rectangle_vram_to_cpu::pos = 0;
-			copy_rectangle_vram_to_cpu::yPos = fifoBuffer[1] >> 16;
-			copy_rectangle_vram_to_cpu::xPos = fifoBuffer[1] & 0xffff;
-			copy_rectangle_vram_to_cpu::ySiz = fifoBuffer[2] >> 16;
-			copy_rectangle_vram_to_cpu::xSiz = fifoBuffer[2] & 0xffff;
-			gpustat.flags.ready_to_send_vram_to_cpu = READY_STATE::ready;
-
+		else if (cmdType == 0x03) {
+			console->info("GP0 Unknown");
 			fifoBuffer.clear();
 		}
-	}
-	else if (cmdType == 0x03) {
-		console->info("GP0 Unknown");
-		fifoBuffer.clear();
-	}
-	else if (cmdType == 0x1f) {
-		console->info("GP0 Interrupt Request (IRQ1)");
-		fifoBuffer.clear();
-	}
-	else if (cmdType >> 5 == 1) {
-		//	calc vertices / words in the buffer to be expected
-		u32 wordCount = 4;
-		wordCount += (cmdType & 0b1000) ? 1 : 0;	//	3 / 4 point polygon
+		else if (cmdType == 0x1f) {
+			console->info("GP0 Interrupt Request (IRQ1)");
+			fifoBuffer.clear();
+		}
+		else if (cmdType >> 5 == 1) {
+			//	calc vertices / words in the buffer to be expected
+			u32 wordCount = 1;
+			u8 vertex_count = (cmdType & 0b0'1000) ? 4 : 3;			//	3 / 4 point polygon
+			bool is_shaded = (cmdType & 0b1'0000) ? true : false;	//	shaded
+			wordCount += vertex_count * (is_shaded ? 2 : 1) - (is_shaded ? 1 : 0);
 
-		if (bufferSize == wordCount) {
+			if (bufferSize == wordCount) {
+				u16 rgb = convertBGR24btoRGB16b(fifoBuffer[0] & 0xff'ffff);
+				std::vector<Vertex> verts;
+
+				//	opaque polygon
+				if (!(cmdType & (1 << 4))) {
+					for (int i = 0; i < wordCount - 1; i++) {
+						Vertex v;
+						v.x = fifoBuffer[i + 1] & 0xffff;
+						v.y = fifoBuffer[i + 1] >> 16;
+						verts.push_back(v);
+					}
+					drawPolygon(verts, rgb);
+				}
+				//	vertex shaded polygon
+				else {
+					std::vector<u16> vert_colors;
+					for (int i = 0; i < wordCount; i += 2) {
+						u16 vert_color = convertBGR24btoRGB16b(fifoBuffer[i] & 0xff'ffff);
+						vert_colors.push_back(vert_color);
+					}
+					for (int i = 1; i < wordCount; i += 2) {
+						Vertex v;
+						v.x = fifoBuffer[i] & 0xffff;
+						v.y = fifoBuffer[i] >> 16;
+						verts.push_back(v);
+					}
+					drawPolygon(verts, vert_colors);
+				}
+
+				console->info("Drawing polygon, color = {0:x}, vertex count = {1:x}, wordcount={2:x}", rgb, vertex_count, wordCount);
+				for (int f = 0; f < verts.size(); f++) {
+					console->info("Polygon point: {0:x} / {1:x}", verts[f].x, verts[f].y);
+				}
+				fifoBuffer.clear();
+			}
+
+		}
+		else if (cmdType >= 0x40 && cmdType < 0x60) {
+			console->info("GP0 Render Lines");
+			fifoBuffer.clear();
+		}
+
+		else if (cmdType == 0x60 && bufferSize >= 3) {
+			console->info("GP0 monochrome rectangle (variable size) (opaque)");
 			u16 rgb = convertBGR24btoRGB16b(fifoBuffer[0] & 0xff'ffff);
-			console->info("Drawing polygon, color = {0:x}, vertex count = {1:x}", rgb, wordCount);
-			std::vector<Vertex> verts;
-			for (int i = 0; i < wordCount - 1; i++) {
-				Vertex v;
-				v.x = fifoBuffer[i + 1] & 0xffff;
-				v.y = fifoBuffer[i + 1] >> 16;
-				verts.push_back(v);
+			u32 yPos = fifoBuffer[1] >> 16;
+			u32 xPos = fifoBuffer[1] & 0xffff;
+			u32 ySiz = fifoBuffer[2] >> 16;
+			u32 xSiz = fifoBuffer[2] & 0xffff;
+			for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
+				for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
+					vram[yS * VRAM_ROW_LENGTH + xS] = rgb;
+				}
 			}
-			drawPolygon(rgb, verts);
 			fifoBuffer.clear();
 		}
-		
-	}
-	else if (cmdType >= 0x40 && cmdType < 0x60) {
-		console->info("GP0 Render Lines");
-		fifoBuffer.clear();
-	}
 
-	else if (cmdType == 0x60 && bufferSize >= 3) {
-		console->info("GP0 monochrome rectangle (variable size) (opaque)");
-		u16 rgb = convertBGR24btoRGB16b(fifoBuffer[0] & 0xff'ffff);
-		u32 yPos = fifoBuffer[1] >> 16;
-		u32 xPos = fifoBuffer[1] & 0xffff;
-		u32 ySiz = fifoBuffer[2] >> 16;
-		u32 xSiz = fifoBuffer[2] & 0xffff;
-		for (u32 yS = yPos; yS < (u32)(yPos + ySiz); yS++) {
-			for (u32 xS = xPos; xS < (u32)(xPos + xSiz); xS++) {
-				vram[yS * VRAM_ROW_LENGTH + xS] = rgb;
-			}
+		else if (cmdType >= 0x60 && cmdType < 0x80) {
+			console->info("GP0 Render Rectangles");
+			//fifoBuffer.clear();
 		}
-		fifoBuffer.clear();
+
+		//	Draw mode settings
+		else if (cmdType >= 0xe1) {
+			console->info("GP0 draw mode settings");
+
+			gpustat.flags.texture_page_x_base = cmdParameter & 0b1111;
+			gpustat.flags.texture_page_y_base = (cmdParameter >> 4) & 1;
+			gpustat.flags.semi_transparency = SEMI_TRANSPARENCY((cmdParameter >> 5) & 0b11);
+			gpustat.flags.texture_page_colors = TEXTURE_PAGE_COLORS((cmdParameter >> 7) & 0b11);
+			gpustat.flags.dither_24b_to_15b = DITHER((cmdParameter >> 9) & 1);
+			gpustat.flags.drawing_to_display_area = DRAWING_TO_DISPLAY_AREA((cmdParameter >> 10) & 1);
+			gpustat.flags.texture_disable = TEXTURE_DISABLE((cmdParameter >> 11) & 1);
+			//	TODO: Textured Rectangle X-Flip = (cmdParameter >> 12) & 1
+			//	TODO: Textured Rectangle Y-Flip = (cmdParameter >> 13) & 1
+
+			fifoBuffer.clear();
+		}
+
+		//	Unhandled
+		else {
+			console->error("Unhandled GP0 ({0:x}h) - fifoBuffer size: {1:x}", cmdType, bufferSize);
+			//exit(1);
+		}
 	}
 
-	else if (cmdType >= 0x60 && cmdType < 0x80) {
-		console->info("GP0 Render Rectangles");
-		//fifoBuffer.clear();
-	}
+	else if (pending_gpu_state == GPU_STATE::GPU_A0_PENDING) {
+		u32 pos = ((a0_processed_words * 2) / (a0_sizx) + a0_posy) * VRAM_ROW_LENGTH + ((a0_processed_words * 2) % a0_sizx + a0_posx);
 
-	//	Draw mode settings
-	else if (cmdType >= 0xe1) {
-		console->info("GP0 draw mode settings");
-
-		gpustat.flags.texture_page_x_base = cmdParameter & 0b1111;
-		gpustat.flags.texture_page_y_base = (cmdParameter >> 4) & 1;
-		gpustat.flags.semi_transparency = SEMI_TRANSPARENCY((cmdParameter >> 5) & 0b11);
-		gpustat.flags.texture_page_colors = TEXTURE_PAGE_COLORS((cmdParameter >> 7) & 0b11);
-		gpustat.flags.dither_24b_to_15b = DITHER((cmdParameter >> 9) & 1);
-		gpustat.flags.drawing_to_display_area = DRAWING_TO_DISPLAY_AREA((cmdParameter >> 10) & 1);
-		gpustat.flags.texture_disable = TEXTURE_DISABLE((cmdParameter >> 11) & 1);
-		//	TODO: Textured Rectangle X-Flip = (cmdParameter >> 12) & 1
-		//	TODO: Textured Rectangle Y-Flip = (cmdParameter >> 13) & 1
-
-		fifoBuffer.clear();
-	}
-
-	//	Unhandled
-	else {
-		console->error("Unhandled GP0 ({0:x}h) - fifoBuffer size: {1:x}", cmdType, bufferSize);
-		//exit(1);
+		vram[pos] = cmd & 0xffff;
+		vram[pos + 1] = cmd >> 16;
+		if (a0_expected_words == ++a0_processed_words * 2) {
+			console->info("GP0 (a0h) Finished");
+			fifoBuffer.clear();
+			pending_gpu_state = GPU_STATE::IDLE;
+		}
 	}
 }
 
@@ -412,34 +447,53 @@ word GPU::readGPUREAD() {
 
 //
 //	Rasterization
+float GPU::edge(Vertex a, Vertex b, Vertex c) {
+	return (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x);
+}
 
-u16 GPU::bresenham(u16 x0, u16 y0, u16 x1, u16 y1, u16 forY) {
-	//console->info("Bresenham, x0={0:x}, y0={1:x}, x1={2:x}, y1={3:x}, forY={4:x}", x0, y0, x1, y1, forY);
-	int dx, dy, err, e2, x, y, prex;
-	dx = abs(x1 - x0);
-	dy = -abs(y1 - y0);
-	x = x0 < x1 ? 1 : -1;
-	y = y0 < y1 ? 1 : -1;
-	err = dy + dx;
-	prex = x0;
-	while (1) {
-		if (x0 == x1 && y0 == y1) {
-			//console->info("Bresenham returning {0:x}", (x0 < x1) ? x0 : prex);
-			return (x0 < x1) ? x0 : prex;
-		}
-		e2 = 2 * err;
-		if (e2 >= dy) {
-			err += dy;
-			x0 += x;
-		}
-		if (e2 <= dx) {
-			err += dx;
-			if (y0 == forY) {
-				//console->info("Bresenham returning {0:x}", (x0 < x1) ? x0 : prex);
-				return (x0 < x1) ? x0 : prex;
+void GPU::barycentric(std::vector<Vertex>& vertices, std::vector<u16>& colors) {
+
+	const u16 bounding_box_min_x = std::min({ vertices[0].x, vertices[1].x, vertices[2].x});
+	const u16 bounding_box_max_x = std::max({ vertices[0].x, vertices[1].x, vertices[2].x });
+	const u16 bounding_box_min_y = std::min({ vertices[0].y, vertices[1].y, vertices[2].y });
+	const u16 bounding_box_max_y = std::max({ vertices[0].y, vertices[1].y, vertices[2].y });
+
+	for (int px = bounding_box_min_x; px < bounding_box_max_x; px++) {
+		for (int py = bounding_box_min_y; py < bounding_box_max_y; py++) {
+			//	edge functions
+			//	> 0 inside tri
+			//	= 0 on line
+			//	< 0 outside tri
+			Vertex p = { px, py };
+			float tri_area = edge(vertices[0], vertices[1], vertices[2]);
+			float w0 = edge(vertices[1], vertices[2], p);
+			float w1 = edge(vertices[2], vertices[0], p);
+			float w2 = edge(vertices[0], vertices[1], p);
+
+			Vertex edge0 = vertices[2] - vertices[1];
+			Vertex edge1 = vertices[0] - vertices[2];
+			Vertex edge2 = vertices[1] - vertices[0];
+
+			bool overlaps = true;
+
+			//	test if point is on edge - if yes make sure it's top/left edge, otherwise
+			//	it will be considered outside of the triangle, to make sure we rasterize
+			//	every point only once
+			overlaps &= (w0 == 0 ? ((edge0.y == 0 && edge0.x > 0) || edge0.y > 0) : (w0 > 0));
+			overlaps &= (w1 == 0 ? ((edge1.y == 0 && edge1.x > 0) || edge1.y > 0) : (w1 > 0));
+			overlaps &= (w2 == 0 ? ((edge2.y == 0 && edge2.x > 0) || edge2.y > 0) : (w2 > 0));
+
+			//	pixel is inside the triangle, and not on an edge that is to be ignored -> render
+			if (overlaps) {
+				w0 /= tri_area;
+				w1 /= tri_area;
+				w2 /= tri_area;
+				float r = w0 * RED(colors[0]) + w1 * RED(colors[1]) + w2 * RED(colors[2]);
+				float g = w0 * GREEN(colors[0]) + w1 * GREEN(colors[1]) + w2 * GREEN(colors[2]);
+				float b = w0 * BLUE(colors[0]) + w1 * BLUE(colors[1]) + w2 * BLUE(colors[2]);
+				u16 color = (u8)r << 10 | (u8)g << 5 | (u8)b;
+				plot(px, py, color);
 			}
-			y0 += y;
-			prex = x0;
 		}
 	}
 }
@@ -448,85 +502,37 @@ void GPU::plot(u16 x, u16 y, u16 color) {
 	vram[y * VRAM_ROW_LENGTH + x] = color;
 }
 
-void GPU::plotLine(u16 color, u16 x1, u16 x2, u16 y) {
-	if (x1 < x2) {
-		for (; x1 <= x2; x1++) {
-			GPU::plot(x1, y, color);
-		}
-	}
-	else {
-		for (; x2 <= x1; x2++) {
-			GPU::plot(x2, y, color);
-		}
-	}
+void GPU::drawTriangle(std::vector<Vertex>& vertices, u16 color) {
+	std::vector<u16> colors = { color, color, color };
+	drawTriangle(vertices, colors);
 }
 
-void GPU::drawFlatBottomTriangle(u16 color, std::vector<Vertex> v) {
+void GPU::drawTriangle(std::vector<Vertex>& vertices, std::vector<u16>& vert_colors) {
+	console->info("Triangle, may still need splitting v0=({0:x}, {1:x}), v1=({2:x}, {3:x}), v2=({4:x}, {5:x})", vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y);
 
-	/*
-				v0
-				/\
-	           /  \
-			  /    \
-	         /      \
-			/        \	
-			v1.......v2
-	*/
-
-	//console->info("Flat Bottom Triangle v0=({0:x}, {1:x}), v1=({2:x}, {3:x}), v2=({4:x}, {5:x})", v[0].x, v[0].y, v[1].x, v[1].y, v[2].x, v[2].y);
-	if (v[0].y == v[1].y && v[1].y == v[2].y) {
-		//console->info("Triangle is a line, ignoring");
-		return;
+	if (edge(vertices[0], vertices[1], vertices[2]) < 0) {
+		std::swap(vertices[1], vertices[2]);
 	}
-	else {
- 		for (int i = v[1].y; i >= v[0].y; i--) {
-			u16 left = bresenham(v[1].x, v[1].y, v[0].x, v[0].y, i);
-			u16 right = bresenham(v[0].x, v[0].y, v[2].x, v[2].y, i);
-			plotLine(color, left, right, i);
-		}
-	}
+	barycentric(vertices, vert_colors);
 }
 
-void GPU::drawFlatTopTriangle(u16 color, std::vector<Vertex> v) {
-
-	/*
-			v0.......v1
-			 \       /
-			  \     /
-			   \   /
-			    \ /
-				v2
-	*/
-
-	//console->info("Flat Top Triangle v0=({0:x}, {1:x}), v1=({2:x}, {3:x}), v2=({4:x}, {5:x})", v[0].x, v[0].y, v[1].x, v[1].y, v[2].x, v[2].y);
-	if (v[0].y == v[1].y && v[1].y == v[2].y) {
-		//console->info("Triangle is a line, ignoring");
-		return;
-	}
-	else {
-		for (int i = v[0].y; i <= v[2].y; i++) {
-			u16 left = bresenham(v[0].x, v[0].y, v[2].x, v[2].y, i);
-			u16 right = bresenham(v[2].x, v[2].y, v[1].x, v[1].y, i);
-			plotLine(color, left, right, i);
-		}
-	}
+void GPU::drawPolygon(std::vector<Vertex>& vertices, u16 color) {
+	std::vector<u16> colors = { color, color, color, color };
+	drawPolygon(vertices, colors);
 }
 
-void GPU::drawTriangle(u16 color, std::vector<Vertex> vertices) {
-	//console->info("Triangle, may still need splitting v0=({0:x}, {1:x}), v1=({2:x}, {3:x}), v2=({4:x}, {5:x})", vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y);
-	
-	//	we need to split the triangle in 2 flatsided triangles
-	Vertex v4;
-	v4.x = (vertices[0].x + ((float)(vertices[1].y - vertices[0].y) / (float)(vertices[2].y - vertices[0].y)) * (vertices[2].x - vertices[0].x));
-	v4.y = vertices[1].y;
-	std::vector<Vertex> tri1 = { vertices[0], vertices[1], v4 };
-	std::vector<Vertex> tri2 = { vertices[1], v4, vertices[2]};
-	drawFlatBottomTriangle(color, tri1);
-	drawFlatTopTriangle(color, tri2);
-}
-
-void GPU::drawPolygon(u16 color, std::vector<Vertex> vertices) {
-	for (int i = 0; i < vertices.size() - 2; i++) {
-		drawTriangle(color, { vertices[i], vertices[i + 1], vertices[i + 2] });
+/// <summary>
+/// Draw polygon with RGB555 colors
+/// </summary>
+/// <param name="vertices">vector of vertices</param>
+/// <param name="vert_colors">vector of RGB555 colors</param>
+void GPU::drawPolygon(std::vector<Vertex>& vertices, std::vector<u16>& vert_colors) {
+	std::vector<Vertex> verts_0 = { vertices[0], vertices[1], vertices[2] };
+	std::vector<u16> colors_0 = { vert_colors[0], vert_colors[1], vert_colors[2]};
+	drawTriangle(verts_0, colors_0);
+	if (vertices.size() == 4 && vert_colors.size() == 4) {
+		std::vector<Vertex> verts_1 = { vertices[1], vertices[2], vertices[3] };
+		std::vector<u16> colors_1 = { vert_colors[1], vert_colors[2], vert_colors[3] };
+		drawTriangle(verts_1, colors_1);
 	}
 }

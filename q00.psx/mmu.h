@@ -315,6 +315,7 @@ namespace Memory {
 	
 	template<typename T>
 	T readFromMemory(word address) {
+
 		//	byte / u8
 		if constexpr (sizeof(T) == sizeof(u8)) {
 			return memory[MASKED_ADDRESS(address)];
@@ -339,6 +340,7 @@ namespace Memory {
 
 	template<typename T>
 	void storeToMemory(word address, T data) {
+
 		if (!R3000A::cop[0].sr.flags.isolate_cache) {
 			//	byte / u8
 			if constexpr (sizeof(T) == sizeof(u8)) {
@@ -619,10 +621,6 @@ namespace Memory {
 	template <typename T>
 	void store(word address, T data) {
 		address = MASKED_ADDRESS(address);
-
-		if (address == 0xea884) {
-			printf("eat shit");
-		}
 
 		//	RAM
 		if (address < 0x1f00'0000) {

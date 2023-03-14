@@ -261,7 +261,7 @@ void DMA::tick() {
 					else {
 						command = Memory::readFromMemory<word>(dma_base_address[2] + i * 4);
 					}
-					console->info("DMA2 - Syncmode 1 - Sending command to GPU {0:x}", command);
+					//console->info("DMA2 - Syncmode 1 - Sending command to GPU {0:x}", command);
 					GPU::sendCommandGP0(command);
 				}
 				dma_channel_control[2].flags.start_busy = START_BUSY::stopped_completed;

@@ -7,7 +7,25 @@
 namespace GPU {
 
 	struct Vertex {
-		u16 x, y;
+		i16 x, y;
+
+		Vertex operator +(const Vertex& a) {
+			Vertex r;
+			r.x = this->x + a.x;
+			r.y = this->y + a.y;
+			return r;
+		}
+
+		Vertex operator -(const Vertex& a) {
+			Vertex r;
+			r.x = this->x - a.x;
+			r.y = this->y - a.y;
+			return r;
+		}
+
+		bool operator< (const Vertex& other) const {
+			return y < other.y;
+		}
 	};
 
 	void init();
