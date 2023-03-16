@@ -22,7 +22,7 @@ namespace GPU {
 	GPU_STATE pending_gpu_state = GPU_STATE::IDLE;
 
 	//	pending command var
-	u32 a0_posx, a0_posy, a0_sizx, a0_sizy, a0_expected_words, a0_processed_words;
+	u32 a0_startx, a0_starty, a0_posx, a0_posy, a0_endx, a0_endy;
 
 	enum class SEMI_TRANSPARENCY : u32 { back_half_plus_front_half = 0, back_plus_front = 1, back_minus_front = 2, back_plus_front_quarter = 3 };
 	enum class TEXTURE_PAGE_COLORS : u32 { col_4b = 0, col_8b = 1, col_15b = 2, reserved = 3 };
@@ -88,13 +88,21 @@ namespace GPU {
 
 	//	copy rectangle (vram to cpu)
 	namespace copy_rectangle_vram_to_cpu {
-		u16 yPos, xPos, ySiz, xSiz;
-		word pos;
+		u16 startx, starty, posx, posy, endx, endy;
 
-		u16 read() {
-			u16 s = VRAM_ROW_LENGTH * yPos + xPos;
-			u32 a = (yPos + (pos % s) / xSiz) * VRAM_ROW_LENGTH + xPos + (pos % s) % xSiz;
-			return vram[a];
+		u32 read() {
+			u32 pos = VRAM_ROW_LENGTH * posy + posx;
+
+			posx += 2;
+			if (posx == endx) {
+				posx = startx;
+				posy++;
+			}
+
+			u16 pixel_1 = vram[pos];
+			u16 pixel_2 = vram[pos + 1];
+
+			return (pixel_1 << 16) | pixel_2;
 		}
 	}
 
@@ -107,6 +115,12 @@ namespace GPU {
 
 	//	Rasterizing
 	void plot(u16, u16, u16);
+	
+	u16 readTexel4bpp(u8 x, u8 y, u32 offset, u32 clut);
+	u16 readTexel8bpp(u8 x, u8 y, u32 offset, u32 clut);
+	u16 readTexel15bpp(u8 x, u8 y, u32 offset, u32 clut);
+	u16 (*readTexelPtrs[4]) (u8 x, u8 y, u32 offset, u32 clut) = {readTexel4bpp, readTexel8bpp, readTexel15bpp, readTexel15bpp};
+
 	void drawPolygon(std::vector<Vertex>& vertices, u16 color);
 	void drawPolygon(std::vector<Vertex>& vertices, std::vector<u16>& vert_colors);
 	void drawPolygon(std::vector<Vertex>& vertices, std::vector<TexCoord>& tex_coords, u16 color, u16 palette, u16 tex_page);
@@ -130,7 +144,7 @@ void GPU::setupSDL() {
 	SDL_Init(SDL_INIT_VIDEO);
 	win = SDL_CreateWindow("q00.psx", 1500, 78, 1024, 512, 0);
 	renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
-	img = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
+	img = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGR555, SDL_TEXTUREACCESS_STREAMING, 1024, 512);
 }
 
 void GPU::draw() {
@@ -210,14 +224,14 @@ void GPU::sendCommandGP0(word cmd) {
 		}
 		else if (cmdType == 0xa0) {
 			if (bufferSize == 3) {
-				a0_posy = fifoBuffer[1] >> 16;
-				a0_posx = fifoBuffer[1] & 0xffff;
-				a0_sizy = fifoBuffer[2] >> 16;
-				a0_sizx = fifoBuffer[2] & 0xffff;
-				a0_expected_words = a0_sizx * a0_sizy;
-				a0_processed_words = 0;
+				a0_starty = fifoBuffer[1] >> 16;
+				a0_startx = fifoBuffer[1] & 0xffff;
+				a0_endy = a0_starty + (fifoBuffer[2] >> 16);
+				a0_endx = a0_startx + (fifoBuffer[2] & 0xffff);
+				a0_posy = a0_starty;
+				a0_posx = a0_startx;
 				pending_gpu_state = GPU_STATE::GPU_A0_PENDING;
-				console->info("GP0 (a0h) Copy Rectangle (CPU to VRAM) - started. expecting={0:x}, available={1:x}", a0_expected_words, a0_processed_words * 2);
+				console->info("GP0 (a0h) Copy Rectangle (CPU to VRAM) - started. x={0:x}, y={1:x}, to_x={2:x}, to_y={3:x}", a0_startx, a0_starty, a0_endx, a0_endy);
 			}
 		}
 
@@ -227,11 +241,12 @@ void GPU::sendCommandGP0(word cmd) {
 				console->info("GP0 (c0h) Copy Rectangle (VRAM to CPU)");
 
 				//	get GPUREAD ready, so CPU can read from it
-				copy_rectangle_vram_to_cpu::pos = 0;
-				copy_rectangle_vram_to_cpu::yPos = fifoBuffer[1] >> 16;
-				copy_rectangle_vram_to_cpu::xPos = fifoBuffer[1] & 0xffff;
-				copy_rectangle_vram_to_cpu::ySiz = fifoBuffer[2] >> 16;
-				copy_rectangle_vram_to_cpu::xSiz = fifoBuffer[2] & 0xffff;
+				copy_rectangle_vram_to_cpu::starty = fifoBuffer[1] >> 16;
+				copy_rectangle_vram_to_cpu::startx = fifoBuffer[1] & 0xffff;
+				copy_rectangle_vram_to_cpu::posy = copy_rectangle_vram_to_cpu::starty;
+				copy_rectangle_vram_to_cpu::posx = copy_rectangle_vram_to_cpu::startx;
+				copy_rectangle_vram_to_cpu::endy = copy_rectangle_vram_to_cpu::starty + fifoBuffer[2] >> 16;
+				copy_rectangle_vram_to_cpu::endx = copy_rectangle_vram_to_cpu::startx + fifoBuffer[2] & 0xffff;
 				gpustat.flags.ready_to_send_vram_to_cpu = READY_STATE::ready;
 
 				fifoBuffer.clear();
@@ -362,11 +377,17 @@ void GPU::sendCommandGP0(word cmd) {
 	}
 
 	else if (pending_gpu_state == GPU_STATE::GPU_A0_PENDING) {
-		u32 pos = ((a0_processed_words * 2) / (a0_sizx) + a0_posy) * VRAM_ROW_LENGTH + ((a0_processed_words * 2) % a0_sizx + a0_posx);
+		u32 pos = a0_posy * VRAM_ROW_LENGTH + a0_posx;
+
+		a0_posx += 2;
+		if (a0_posx == a0_endx) {
+			a0_posx = a0_startx;
+			a0_posy++;
+		}
 
 		vram[pos] = cmd & 0xffff;
 		vram[pos + 1] = cmd >> 16;
-		if (a0_expected_words == ++a0_processed_words * 2) {
+		if (a0_posy == a0_endy) {
 			console->info("GP0 (a0h) Finished");
 			fifoBuffer.clear();
 			pending_gpu_state = GPU_STATE::IDLE;
@@ -488,8 +509,8 @@ void GPU::drawTriangleTextured(std::vector<Vertex>& vertices, std::vector<TexCoo
 	const u16 bounding_box_max_y = std::max({ vertices[0].y, vertices[1].y, vertices[2].y });
 
 	//	clut aka palette
-	const u8 clut_x = palette & 0x3f;
-	const u16 clut_y = palette >> 6;
+	const u8 clut_x = palette & 0x3f * 16;
+	const u16 clut_y = palette >> 6 & 0x1ff;
 	const u32 clut_address = VRAM_ROW_LENGTH * clut_y + clut_x;
 
 	GPUSTAT gpustat_tex_page;
@@ -527,21 +548,32 @@ void GPU::drawTriangleTextured(std::vector<Vertex>& vertices, std::vector<TexCoo
 				w2 /= tri_area;
 
 				TexCoord t;
-				t.x = w0 * (float)tex_coords[0].x + w1 * (float)tex_coords[1].x + w2 * (float)tex_coords[2].x;
-				t.y = w0 * (float)tex_coords[0].y + w1 * (float)tex_coords[1].y + w2 * (float)tex_coords[2].y;
-				const u32 tex_base_address = gpustat_tex_page.flags.texture_page_y_base * 256 * VRAM_ROW_LENGTH + gpustat_tex_page.flags.texture_page_x_base * 64;
-
-				//	for 16bpp
-				//u16 tex_pixel = vram[tex_base_address + t.y * VRAM_ROW_LENGTH + t.x];
-
-				//	for 4bpp
-				u16 tex_pixel = vram[tex_base_address + t.y * VRAM_ROW_LENGTH + t.x / 4];
+				t.x = w0 * tex_coords[0].x + w1 * tex_coords[1].x + w2 * tex_coords[2].x;
+				t.y = w0 * tex_coords[0].y + w1 * tex_coords[1].y + w2 * tex_coords[2].y;
+				u32 tex_base_address = gpustat_tex_page.flags.texture_page_y_base * 256 * VRAM_ROW_LENGTH + gpustat_tex_page.flags.texture_page_x_base * 64;
+				u16 tex_pixel = readTexelPtrs[(u8)gpustat_tex_page.flags.texture_page_colors](t.x, t.y, tex_base_address, clut_address);
 
 				plot(px, py, tex_pixel);
 			}
 		}
 	}
 }
+
+u16 GPU::readTexel4bpp(u8 x, u8 y, u32 offset, u32 clut) {
+	const u16 texel = vram[offset + y * VRAM_ROW_LENGTH + x / 4] >> (x % 4) & 0xff;
+	return vram[clut + texel];
+}
+
+u16 GPU::readTexel8bpp(u8 x, u8 y, u32 offset, u32 clut) {
+	//return vram[offset + y * VRAM_ROW_LENGTH + x / 2];
+	console->error("Unimplemented Texture mode 8 bit");
+	exit(1);
+}
+
+u16 GPU::readTexel15bpp(u8 x, u8 y, u32 offset, u32 clut) {
+	return vram[offset + y * VRAM_ROW_LENGTH + x];
+}
+
 
 void GPU::drawTriangle(std::vector<Vertex>& vertices, std::vector<u16>& colors) {
 
@@ -588,13 +620,14 @@ void GPU::drawTriangle(std::vector<Vertex>& vertices, std::vector<u16>& colors) 
 				float r = w0 * RED(colors[0]) + w1 * RED(colors[1]) + w2 * RED(colors[2]);
 				float g = w0 * GREEN(colors[0]) + w1 * GREEN(colors[1]) + w2 * GREEN(colors[2]);
 				float b = w0 * BLUE(colors[0]) + w1 * BLUE(colors[1]) + w2 * BLUE(colors[2]);
-				u16 color = (u8)r << 10 | (u8)g << 5 | (u8)b;
+				u16 color = (u8)b << 10 | (u8)g << 5 | (u8)r;
 				plot(px, py, color);
 			}
 		}
 	}
 }
 
+//	colors needs to be in BGR555
 void GPU::plot(u16 x, u16 y, u16 color) {
 	vram[y * VRAM_ROW_LENGTH + x] = color;
 }
