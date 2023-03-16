@@ -109,10 +109,11 @@ namespace GPU {
 	void plot(u16, u16, u16);
 	void drawPolygon(std::vector<Vertex>& vertices, u16 color);
 	void drawPolygon(std::vector<Vertex>& vertices, std::vector<u16>& vert_colors);
+	void drawPolygon(std::vector<Vertex>& vertices, std::vector<TexCoord>& tex_coords, u16 color, u16 palette, u16 tex_page);
 	void drawTriangle(std::vector<Vertex>& vertices, u16 color);
 	void drawTriangle(std::vector<Vertex>& vertices, std::vector<u16>& vert_colors);
+	void drawTriangleTextured(std::vector<Vertex>& vertices, std::vector<TexCoord>& tex_coords, u16 color, u16 palette, u16 tex_page);
 	float edge(Vertex a, Vertex b, Vertex c);
-	void barycentric(std::vector<Vertex>& vertices, std::vector<u16>& colors);
 }
 
 void GPU::init() {
@@ -249,14 +250,16 @@ void GPU::sendCommandGP0(word cmd) {
 			u32 wordCount = 1;
 			u8 vertex_count = (cmdType & 0b0'1000) ? 4 : 3;			//	3 / 4 point polygon
 			bool is_shaded = (cmdType & 0b1'0000) ? true : false;	//	shaded
-			wordCount += vertex_count * (is_shaded ? 2 : 1) - (is_shaded ? 1 : 0);
+			bool is_textured = (cmdType & 0b0100) ? true : false;	//	textured
+			wordCount += vertex_count * (is_shaded || is_textured ? 2 : 1) - (is_shaded || is_textured ? 1 : 0) + (is_textured ? 1 : 0);
 
 			if (bufferSize == wordCount) {
 				u16 rgb = convertBGR24btoRGB16b(fifoBuffer[0] & 0xff'ffff);
 				std::vector<Vertex> verts;
+				std::vector<TexCoord> tex_coords;
 
 				//	opaque polygon
-				if (!(cmdType & (1 << 4))) {
+				if (!is_shaded && !is_textured) {
 					for (int i = 0; i < wordCount - 1; i++) {
 						Vertex v;
 						v.x = fifoBuffer[i + 1] & 0xffff;
@@ -265,8 +268,25 @@ void GPU::sendCommandGP0(word cmd) {
 					}
 					drawPolygon(verts, rgb);
 				}
+				//	textured polygon (24h, 25h, 26h, 27h, 2ch, 2dh, 2eh, 2fh)
+				else if (is_textured) {
+					u16 color = fifoBuffer[0] >> 16;
+					u16 palette = fifoBuffer[2] >> 16;
+					u16 texpage = fifoBuffer[4] >> 16;
+					for (int i = 1; i < wordCount; i += 2) {
+						TexCoord tex_coord;
+						tex_coord.x = fifoBuffer[i + 1] & 0xff;
+						tex_coord.y = (fifoBuffer[i + 1] >> 8) & 0xff;
+						tex_coords.push_back(tex_coord);
+						Vertex v;
+						v.x = fifoBuffer[i] & 0xffff;
+						v.y = fifoBuffer[i] >> 16;
+						verts.push_back(v);
+					}
+					drawPolygon(verts, tex_coords, color, palette, texpage);
+				}
 				//	vertex shaded polygon
-				else {
+				else if (is_shaded) {
 					std::vector<u16> vert_colors;
 					for (int i = 0; i < wordCount; i += 2) {
 						u16 vert_color = convertBGR24btoRGB16b(fifoBuffer[i] & 0xff'ffff);
@@ -284,6 +304,9 @@ void GPU::sendCommandGP0(word cmd) {
 				console->info("Drawing polygon, color = {0:x}, vertex count = {1:x}, wordcount={2:x}", rgb, vertex_count, wordCount);
 				for (int f = 0; f < verts.size(); f++) {
 					console->info("Polygon point: {0:x} / {1:x}", verts[f].x, verts[f].y);
+				}
+				for (int f = 0; f < tex_coords.size(); f++) {
+					console->info("Tex Coord: {0:x} / {1:x}", tex_coords[f].x, tex_coords[f].y);
 				}
 				fifoBuffer.clear();
 			}
@@ -451,7 +474,81 @@ float GPU::edge(Vertex a, Vertex b, Vertex c) {
 	return (c.x - a.x) * (b.y - a.y) - (c.y - a.y) * (b.x - a.x);
 }
 
-void GPU::barycentric(std::vector<Vertex>& vertices, std::vector<u16>& colors) {
+void GPU::drawTriangleTextured(std::vector<Vertex>& vertices, std::vector<TexCoord>& tex_coords, u16 color, u16 palette, u16 tex_page) {
+	
+	//	make sure order is correct
+	if (edge(vertices[0], vertices[1], vertices[2]) < 0) {
+		std::swap(vertices[1], vertices[2]);
+		std::swap(tex_coords[1], tex_coords[2]);
+	}
+
+	const u16 bounding_box_min_x = std::min({ vertices[0].x, vertices[1].x, vertices[2].x });
+	const u16 bounding_box_max_x = std::max({ vertices[0].x, vertices[1].x, vertices[2].x });
+	const u16 bounding_box_min_y = std::min({ vertices[0].y, vertices[1].y, vertices[2].y });
+	const u16 bounding_box_max_y = std::max({ vertices[0].y, vertices[1].y, vertices[2].y });
+
+	//	clut aka palette
+	const u8 clut_x = palette & 0x3f;
+	const u16 clut_y = palette >> 6;
+	const u32 clut_address = VRAM_ROW_LENGTH * clut_y + clut_x;
+
+	GPUSTAT gpustat_tex_page;
+	gpustat_tex_page.set(tex_page);
+
+	for (int px = bounding_box_min_x; px < bounding_box_max_x; px++) {
+		for (int py = bounding_box_min_y; py < bounding_box_max_y; py++) {
+			//	edge functions
+			//	> 0 inside tri
+			//	= 0 on line
+			//	< 0 outside tri
+			Vertex p = { px, py };
+			float tri_area = edge(vertices[0], vertices[1], vertices[2]);
+			float w0 = edge(vertices[1], vertices[2], p);
+			float w1 = edge(vertices[2], vertices[0], p);
+			float w2 = edge(vertices[0], vertices[1], p);
+
+			Vertex edge0 = vertices[2] - vertices[1];
+			Vertex edge1 = vertices[0] - vertices[2];
+			Vertex edge2 = vertices[1] - vertices[0];
+
+			bool overlaps = true;
+
+			//	test if point is on edge - if yes make sure it's top/left edge, otherwise
+			//	it will be considered outside of the triangle, to make sure we rasterize
+			//	every point only once
+			overlaps &= (w0 == 0 ? ((edge0.y == 0 && edge0.x > 0) || edge0.y > 0) : (w0 > 0));
+			overlaps &= (w1 == 0 ? ((edge1.y == 0 && edge1.x > 0) || edge1.y > 0) : (w1 > 0));
+			overlaps &= (w2 == 0 ? ((edge2.y == 0 && edge2.x > 0) || edge2.y > 0) : (w2 > 0));
+
+			//	pixel is inside the triangle, and not on an edge that is to be ignored -> render
+			if (overlaps) {
+				w0 /= tri_area;
+				w1 /= tri_area;
+				w2 /= tri_area;
+
+				TexCoord t;
+				t.x = w0 * (float)tex_coords[0].x + w1 * (float)tex_coords[1].x + w2 * (float)tex_coords[2].x;
+				t.y = w0 * (float)tex_coords[0].y + w1 * (float)tex_coords[1].y + w2 * (float)tex_coords[2].y;
+				const u32 tex_base_address = gpustat_tex_page.flags.texture_page_y_base * 256 * VRAM_ROW_LENGTH + gpustat_tex_page.flags.texture_page_x_base * 64;
+
+				//	for 16bpp
+				//u16 tex_pixel = vram[tex_base_address + t.y * VRAM_ROW_LENGTH + t.x];
+
+				//	for 4bpp
+				u16 tex_pixel = vram[tex_base_address + t.y * VRAM_ROW_LENGTH + t.x / 4];
+
+				plot(px, py, tex_pixel);
+			}
+		}
+	}
+}
+
+void GPU::drawTriangle(std::vector<Vertex>& vertices, std::vector<u16>& colors) {
+
+	//	make sure order is correct
+	if (edge(vertices[0], vertices[1], vertices[2]) < 0) {
+		std::swap(vertices[1], vertices[2]);
+	}
 
 	const u16 bounding_box_min_x = std::min({ vertices[0].x, vertices[1].x, vertices[2].x});
 	const u16 bounding_box_max_x = std::max({ vertices[0].x, vertices[1].x, vertices[2].x });
@@ -507,25 +604,12 @@ void GPU::drawTriangle(std::vector<Vertex>& vertices, u16 color) {
 	drawTriangle(vertices, colors);
 }
 
-void GPU::drawTriangle(std::vector<Vertex>& vertices, std::vector<u16>& vert_colors) {
-	console->info("Triangle, may still need splitting v0=({0:x}, {1:x}), v1=({2:x}, {3:x}), v2=({4:x}, {5:x})", vertices[0].x, vertices[0].y, vertices[1].x, vertices[1].y, vertices[2].x, vertices[2].y);
-
-	if (edge(vertices[0], vertices[1], vertices[2]) < 0) {
-		std::swap(vertices[1], vertices[2]);
-	}
-	barycentric(vertices, vert_colors);
-}
-
 void GPU::drawPolygon(std::vector<Vertex>& vertices, u16 color) {
 	std::vector<u16> colors = { color, color, color, color };
 	drawPolygon(vertices, colors);
 }
 
-/// <summary>
-/// Draw polygon with RGB555 colors
-/// </summary>
-/// <param name="vertices">vector of vertices</param>
-/// <param name="vert_colors">vector of RGB555 colors</param>
+//	shaded polygon
 void GPU::drawPolygon(std::vector<Vertex>& vertices, std::vector<u16>& vert_colors) {
 	std::vector<Vertex> verts_0 = { vertices[0], vertices[1], vertices[2] };
 	std::vector<u16> colors_0 = { vert_colors[0], vert_colors[1], vert_colors[2]};
@@ -534,5 +618,17 @@ void GPU::drawPolygon(std::vector<Vertex>& vertices, std::vector<u16>& vert_colo
 		std::vector<Vertex> verts_1 = { vertices[1], vertices[2], vertices[3] };
 		std::vector<u16> colors_1 = { vert_colors[1], vert_colors[2], vert_colors[3] };
 		drawTriangle(verts_1, colors_1);
+	}
+}
+
+//	textured polygon
+void GPU::drawPolygon(std::vector<Vertex>& vertices, std::vector<TexCoord>& tex_coords, u16 color, u16 palette, u16 tex_page) {
+	std::vector<Vertex> verts_0 = { vertices[0], vertices[1], vertices[2] };
+	std::vector<TexCoord> tex_coords_0 = { tex_coords[0], tex_coords[1], tex_coords[2] };
+	drawTriangleTextured(verts_0, tex_coords_0, color, palette, tex_page );
+	if (vertices.size() == 4 && tex_coords.size() == 4) {
+		std::vector<Vertex> verts_1 = { vertices[1], vertices[2], vertices[3] };
+		std::vector<TexCoord> tex_coords_1 = { tex_coords[1], tex_coords[2], tex_coords[3] };
+		drawTriangleTextured(verts_1, tex_coords_1, color, palette, tex_page);
 	}
 }

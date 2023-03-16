@@ -28,6 +28,10 @@ namespace GPU {
 		}
 	};
 
+	struct TexCoord {
+		u8 x, y;
+	};
+
 	void init();
 
 	void sendCommandGP0(word cmd);

@@ -29,6 +29,11 @@ int main(int argc, char* argv[]) {
     SPU::init();
     //UI::init();
     
+
+    //FileImport::loadEXE("RenderPolygon16BPP.exe");
+    //FileImport::loadEXE("RenderRectangle16BPP.exe");
+    //FileImport::loadEXE("RenderTexturePolygonCLUT4BPP.exe");
+
     // FileImport::loadEXE("CPUADD.exe"); // - PASSED
     // FileImport::loadEXE("CPUADDI.exe"); // - PASSED
     // FileImport::loadEXE("CPUADDIU.exe"); // - PASSED
