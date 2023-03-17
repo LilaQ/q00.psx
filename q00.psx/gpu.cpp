@@ -93,8 +93,8 @@ namespace GPU {
 		u32 read() {
 			u32 pos = VRAM_ROW_LENGTH * posy + posx;
 
-			posx++;
-			if (posx == endx) {
+			posx += 2;
+			if (posx >= endx) {
 				posx = startx;
 				posy++;
 			}
@@ -102,15 +102,13 @@ namespace GPU {
 			u16 pixel = vram[pos];
 			u16 pixel2 = vram[pos + 1];
 
-			if (posy == endy) {
+			if (posy >= endy) {
 				gpustat.flags.ready_to_send_vram_to_cpu = READY_STATE::not_ready;
 			}
 
 			return (pixel2 << 16) | pixel;
 		}
 	}
-
-	std::vector<u32> hamwa;
 
 	//	SDL
 	void setupSDL();
@@ -392,14 +390,8 @@ void GPU::sendCommandGP0(word cmd) {
 			a0_posy++;
 		}
 
-		if (std::count(hamwa.begin(), hamwa.end(), pos) == false) {
-			vram[pos] = cmd & 0xffff;
-			hamwa.push_back(pos);
-		}
-		if (std::count(hamwa.begin(), hamwa.end(), (pos + 1)) == false) {
-			vram[pos + 1] = cmd >> 16;
-			hamwa.push_back(pos + 1);
-		}
+		vram[pos] = cmd & 0xffff;
+		vram[pos + 1] = cmd >> 16;
 		if (a0_posy == a0_endy) {
 			console->info("GP0 (a0h) Finished");
 			fifoBuffer.clear();

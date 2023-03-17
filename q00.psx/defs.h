@@ -13,11 +13,11 @@ typedef i64 diword;
 typedef u32 word;
 typedef u16 hword;
 typedef u8 byte;
-#define SIGN_EXT8_TO_32(a) (int32_t)(int8_t)a
-#define SIGN_EXT16_TO_32(a) (int32_t)(int16_t)a
-#define SIGN_EXT16(a) (int16_t)(int8_t)a
-#define SIGN_EXT32(a) (int32_t)(int16_t)a
-#define SIGN_EXT64(a) (int64_t)(int32_t)a
+#define SIGN_EXT8_TO_32(a) ((int32_t)(int8_t)a)
+#define SIGN_EXT16_TO_32(a) ((int32_t)(int16_t)a)
+#define SIGN_EXT16(a) ((int16_t)(int8_t)a)
+#define SIGN_EXT32(a) ((int32_t)(int16_t)a)
+#define SIGN_EXT64(a) ((int64_t)(int32_t)a)
 
 #define SIGN_EXT_BYTE_TO_WORD(a) SIGN_EXT8_TO_32(a)
 #define SIGN_EXT_HWORD_TO_WORD(a) SIGN_EXT16_TO_32(a)
