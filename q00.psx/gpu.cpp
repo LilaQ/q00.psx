@@ -93,18 +93,24 @@ namespace GPU {
 		u32 read() {
 			u32 pos = VRAM_ROW_LENGTH * posy + posx;
 
-			posx += 2;
+			posx++;
 			if (posx == endx) {
 				posx = startx;
 				posy++;
 			}
 
-			u16 pixel_1 = vram[pos];
-			u16 pixel_2 = vram[pos + 1];
+			u16 pixel = vram[pos];
+			u16 pixel2 = vram[pos + 1];
 
-			return (pixel_1 << 16) | pixel_2;
+			if (posy == endy) {
+				gpustat.flags.ready_to_send_vram_to_cpu = READY_STATE::not_ready;
+			}
+
+			return (pixel2 << 16) | pixel;
 		}
 	}
+
+	std::vector<u32> hamwa;
 
 	//	SDL
 	void setupSDL();
@@ -115,6 +121,7 @@ namespace GPU {
 
 	//	Rasterizing
 	void plot(u16, u16, u16);
+	void plot(u16 x, u16 y, u16 color, SEMI_TRANSPARENCY trans);
 	
 	u16 readTexel4bpp(u8 x, u8 y, u32 offset, u32 clut);
 	u16 readTexel8bpp(u8 x, u8 y, u32 offset, u32 clut);
@@ -245,8 +252,8 @@ void GPU::sendCommandGP0(word cmd) {
 				copy_rectangle_vram_to_cpu::startx = fifoBuffer[1] & 0xffff;
 				copy_rectangle_vram_to_cpu::posy = copy_rectangle_vram_to_cpu::starty;
 				copy_rectangle_vram_to_cpu::posx = copy_rectangle_vram_to_cpu::startx;
-				copy_rectangle_vram_to_cpu::endy = copy_rectangle_vram_to_cpu::starty + fifoBuffer[2] >> 16;
-				copy_rectangle_vram_to_cpu::endx = copy_rectangle_vram_to_cpu::startx + fifoBuffer[2] & 0xffff;
+				copy_rectangle_vram_to_cpu::endy = copy_rectangle_vram_to_cpu::starty + (fifoBuffer[2] >> 16);
+				copy_rectangle_vram_to_cpu::endx = copy_rectangle_vram_to_cpu::startx + (fifoBuffer[2] & 0xffff);
 				gpustat.flags.ready_to_send_vram_to_cpu = READY_STATE::ready;
 
 				fifoBuffer.clear();
@@ -385,8 +392,14 @@ void GPU::sendCommandGP0(word cmd) {
 			a0_posy++;
 		}
 
-		vram[pos] = cmd & 0xffff;
-		vram[pos + 1] = cmd >> 16;
+		if (std::count(hamwa.begin(), hamwa.end(), pos) == false) {
+			vram[pos] = cmd & 0xffff;
+			hamwa.push_back(pos);
+		}
+		if (std::count(hamwa.begin(), hamwa.end(), (pos + 1)) == false) {
+			vram[pos + 1] = cmd >> 16;
+			hamwa.push_back(pos + 1);
+		}
 		if (a0_posy == a0_endy) {
 			console->info("GP0 (a0h) Finished");
 			fifoBuffer.clear();
@@ -509,8 +522,8 @@ void GPU::drawTriangleTextured(std::vector<Vertex>& vertices, std::vector<TexCoo
 	const u16 bounding_box_max_y = std::max({ vertices[0].y, vertices[1].y, vertices[2].y });
 
 	//	clut aka palette
-	const u8 clut_x = palette & 0x3f * 16;
-	const u16 clut_y = palette >> 6 & 0x1ff;
+	const u8 clut_x = (palette & 0x3f) * 16;
+	const u16 clut_y = (palette >> 6) & 0x1ff;
 	const u32 clut_address = VRAM_ROW_LENGTH * clut_y + clut_x;
 
 	GPUSTAT gpustat_tex_page;
@@ -553,14 +566,20 @@ void GPU::drawTriangleTextured(std::vector<Vertex>& vertices, std::vector<TexCoo
 				u32 tex_base_address = gpustat_tex_page.flags.texture_page_y_base * 256 * VRAM_ROW_LENGTH + gpustat_tex_page.flags.texture_page_x_base * 64;
 				u16 tex_pixel = readTexelPtrs[(u8)gpustat_tex_page.flags.texture_page_colors](t.x, t.y, tex_base_address, clut_address);
 
-				plot(px, py, tex_pixel);
+				//	pixel has semi-transparency bit set
+				if (tex_pixel >> 15) {
+					plot(px, py, tex_pixel, gpustat_tex_page.flags.semi_transparency);
+				}
+				else if (tex_pixel) {
+					plot(px, py, tex_pixel);
+				}
 			}
 		}
 	}
 }
 
 u16 GPU::readTexel4bpp(u8 x, u8 y, u32 offset, u32 clut) {
-	const u16 texel = vram[offset + y * VRAM_ROW_LENGTH + x / 4] >> (x % 4) & 0xff;
+	const u16 texel = (vram[offset + y * VRAM_ROW_LENGTH + x / 4] >> ((x % 4) * 4)) & 0xf;
 	return vram[clut + texel];
 }
 
@@ -630,6 +649,32 @@ void GPU::drawTriangle(std::vector<Vertex>& vertices, std::vector<u16>& colors) 
 //	colors needs to be in BGR555
 void GPU::plot(u16 x, u16 y, u16 color) {
 	vram[y * VRAM_ROW_LENGTH + x] = color;
+}
+
+void GPU::plot(u16 x, u16 y, u16 color, SEMI_TRANSPARENCY trans) {
+	u16 old_pixel = vram[VRAM_ROW_LENGTH * y + x];
+	switch (trans) {
+		case SEMI_TRANSPARENCY::back_half_plus_front_half: {
+			const u16 p0 = color * .5 + old_pixel * .5;
+			plot(x, y, p0);
+			break;
+		}
+		case SEMI_TRANSPARENCY::back_plus_front: {
+			const u16 p1 = color + old_pixel;
+			plot(x, y, p1);
+			break;
+		}
+		case SEMI_TRANSPARENCY::back_minus_front: {
+			const u16 p2 = old_pixel - color;
+			plot(x, y, p2);
+			break;
+		}
+		case SEMI_TRANSPARENCY::back_plus_front_quarter: {
+			const u16 p3 = old_pixel + color * .25;
+			plot(x, y, p3);
+			break;
+		}
+	}
 }
 
 void GPU::drawTriangle(std::vector<Vertex>& vertices, u16 color) {
